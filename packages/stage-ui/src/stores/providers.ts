@@ -812,6 +812,54 @@ export const useProvidersStore = defineStore('providers', () => {
         },
       },
     },
+    'openai-compatible': {
+      id: 'openai-compatible',
+      category: 'chat',
+      tasks: ['text-generation'],
+      nameKey: 'settings.pages.providers.provider.openai-compatible.title',
+      name: 'OpenAI Compatible',
+      descriptionKey: 'settings.pages.providers.provider.openai-compatible.description',
+      description: 'Connect to any API that follows the OpenAI specification.',
+      icon: 'i-lobe-icons:openai',
+      defaultOptions: () => ({
+        baseUrl: '',
+      }),
+      createProvider: async config => createOpenAI((config.apiKey as string).trim(), (config.baseUrl as string).trim()),
+      capabilities: {
+        listModels: async (config) => {
+          return (await listModels({
+            ...createOpenAI((config.apiKey as string).trim(), (config.baseUrl as string).trim()).model(),
+          })).map((model) => {
+            return {
+              id: model.id,
+              name: model.id,
+              provider: 'openai-compatible',
+              description: '',
+              contextLength: 0,
+              deprecated: false,
+            } satisfies ModelInfo
+          })
+        },
+      },
+      validators: {
+        validateProviderConfig: (config) => {
+          const errors = [
+            !config.apiKey && new Error('API key is required'),
+            !config.baseUrl && new Error('Base URL is required'),
+          ].filter(Boolean)
+
+          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
+
+          return {
+            errors,
+            reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
+            valid: !!config.apiKey && !!config.baseUrl,
+          }
+        },
+      },
+    },
     'openai-audio-speech': {
       id: 'openai-audio-speech',
       category: 'speech',
