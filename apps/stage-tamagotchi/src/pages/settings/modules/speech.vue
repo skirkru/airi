@@ -59,7 +59,6 @@ onMounted(async () => {
   await speechStore.loadVoicesForProvider(activeSpeechProvider.value)
 })
 
-// stop spam 8 times
 watchDebounced(activeSpeechProvider, async () => {
   await providersStore.loadModelsForConfiguredProviders()
   await speechStore.loadVoicesForProvider(activeSpeechProvider.value)
