@@ -17,6 +17,7 @@ import {
   FieldRange,
   Textarea,
 } from '@proj-airi/ui'
+import { watchDebounced } from '@vueuse/core'
 import { generateSpeech } from '@xsai/generate-speech'
 import { storeToRefs } from 'pinia'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
@@ -58,9 +59,20 @@ onMounted(async () => {
   await speechStore.loadVoicesForProvider(activeSpeechProvider.value)
 })
 
-watch(activeSpeechProvider, async () => {
+// stop spam 8 times
+watchDebounced(activeSpeechProvider, async () => {
   await providersStore.loadModelsForConfiguredProviders()
   await speechStore.loadVoicesForProvider(activeSpeechProvider.value)
+}, { debounce: 100 })
+
+watch(activeSpeechVoiceId, (newId) => {
+  if (newId) {
+    const voices = availableVoices.value[activeSpeechProvider.value] || []
+    const existingVoice = voices.find(voice => voice.id === newId)
+    if (!existingVoice) {
+      updateCustomVoiceName(newId)
+    }
+  }
 })
 
 // Function to generate speech
