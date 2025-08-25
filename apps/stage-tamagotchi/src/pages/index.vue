@@ -68,7 +68,10 @@ watchThrottled([mouseX, mouseY], async ([x, y]) => {
     }
 
     if (isOverUI.value) {
-      passThroughCommands.stopPassThrough()
+      if (isPassingThrough.value) {
+        passThroughCommands.stopPassThrough()
+        isPassingThrough.value = false
+      }
       return
     }
   }
@@ -108,7 +111,10 @@ watchThrottled([mouseX, mouseY], async ([x, y]) => {
   isClickThrough.value = isTransparent
 
   if (windowControlStore.isIgnoringMouseEvent) {
-    passThroughCommands.startPassThrough()
+    if (!isPassingThrough.value) {
+      passThroughCommands.startPassThrough()
+      isPassingThrough.value = true
+    }
     return
   }
 
