@@ -26,12 +26,10 @@ withDefaults(defineProps<{
 
 const live2dCanvasRef = ref<{ canvasElement: () => HTMLCanvasElement }>()
 
-function canvasElement() {
-  return live2dCanvasRef.value?.canvasElement()
-}
-
 defineExpose({
-  canvasElement,
+  canvasElement: () => {
+    return live2dCanvasRef.value?.canvasElement()
+  },
 })
 </script>
 
