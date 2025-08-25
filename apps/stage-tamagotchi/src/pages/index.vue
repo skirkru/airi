@@ -48,6 +48,14 @@ watchThrottled([mouseX, mouseY], async ([x, y]) => {
   if (!canvas)
     return
 
+  if (windowControlStore.controlMode === WindowControlMode.RESIZE || windowControlStore.controlMode === WindowControlMode.MOVE) {
+    if (isPassingThrough.value) {
+      passThroughCommands.stopPassThrough()
+      isPassingThrough.value = false
+    }
+    return
+  }
+
   const relativeX = x - windowX.value
   const relativeY = y - windowY.value
 
