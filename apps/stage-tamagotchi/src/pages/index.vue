@@ -10,8 +10,10 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
 import ResourceStatusIsland from '../components/Widgets/ResourceStatusIsland/index.vue'
 
-import { useTauriCore, useTauriEvent } from '../composables/tauri'
+import { commands as passThroughCommands } from '../bindings/tauri-plugins/window-pass-through-on-hover'
+import { useTauriCore, useTauriEvent, useTauriWindow } from '../composables/tauri'
 import { useTauriGlobalShortcuts } from '../composables/tauri-global-shortcuts'
+import { useRdevMouse } from '../composables/use-rdev-mouse'
 import { useResourcesStore } from '../stores/resources'
 import { useWindowStore } from '../stores/window'
 import { useWindowControlStore } from '../stores/window-controls'
@@ -21,6 +23,8 @@ useTauriGlobalShortcuts()
 const windowControlStore = useWindowControlStore()
 const resourcesStore = useResourcesStore()
 const mcpStore = useMcpStore()
+const { getPosition } = useTauriWindow()
+const { mouseX, mouseY } = useRdevMouse()
 
 const { listen } = useTauriEvent<AiriTamagotchiEvents>()
 const { invoke } = useTauriCore()
@@ -29,6 +33,81 @@ const { scale, positionInPercentageString } = storeToRefs(useLive2d())
 
 const { centerPos, live2dLookAtX, live2dLookAtY, shouldHideView } = storeToRefs(useWindowStore())
 const live2dFocusAt = ref<Point>(centerPos.value)
+const widgetStageRef = ref<{ canvasElement: () => HTMLCanvasElement }>()
+const resourceStatusIslandRef = ref<InstanceType<typeof ResourceStatusIsland>>()
+const buttonsContainerRef = ref<HTMLDivElement>()
+const windowX = ref(0)
+const windowY = ref(0)
+const isClickThrough = ref(false)
+const isPassingThrough = ref(false)
+
+watch([mouseX, mouseY], async ([x, y]) => {
+  if (windowControlStore.isIgnoringMouseEvent) {
+    passThroughCommands.startPassThrough()
+    return
+  }
+
+  const canvas = widgetStageRef.value?.canvasElement()
+  if (!canvas)
+    return
+
+  const relativeX = x - windowX.value
+  const relativeY = y - windowY.value
+
+  const islandEl = resourceStatusIslandRef.value?.$el as HTMLElement
+  const buttonsEl = buttonsContainerRef.value
+
+  let isOverUI = false
+  if (islandEl) {
+    const rect = islandEl.getBoundingClientRect()
+    if (relativeX >= rect.left && relativeX <= rect.right && relativeY >= rect.top && relativeY <= rect.bottom)
+      isOverUI = true
+  }
+  if (!isOverUI && buttonsEl) {
+    const rect = buttonsEl.getBoundingClientRect()
+    if (relativeX >= rect.left && relativeX <= rect.right && relativeY >= rect.top && relativeY <= rect.bottom)
+      isOverUI = true
+  }
+
+  let isTransparent = false
+  if (
+    !isOverUI
+    && relativeX >= 0
+    && relativeX < canvas.clientWidth
+    && relativeY >= 0
+    && relativeY < canvas.clientHeight
+  ) {
+    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl')
+    if (gl) {
+      const pixelX = relativeX * (gl.drawingBufferWidth / canvas.clientWidth)
+      const pixelY
+        = gl.drawingBufferHeight
+          - relativeY * (gl.drawingBufferHeight / canvas.clientHeight)
+
+      const data = new Uint8Array(4)
+      gl.readPixels(
+        Math.floor(pixelX),
+        Math.floor(pixelY),
+        1,
+        1,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        data,
+      )
+      isTransparent = data[3] < 100 // Use a small threshold for anti-aliasing
+    }
+  }
+
+  isClickThrough.value = isTransparent
+  if (isTransparent && !isPassingThrough.value) {
+    passThroughCommands.startPassThrough()
+    isPassingThrough.value = true
+  }
+  else if (!isTransparent && isPassingThrough.value) {
+    passThroughCommands.stopPassThrough()
+    isPassingThrough.value = false
+  }
+})
 
 watch([live2dLookAtX, live2dLookAtY], ([x, y]) => live2dFocusAt.value = { x, y }, { immediate: true })
 
@@ -82,6 +161,16 @@ async function setupWhisperModel() {
 }
 
 onMounted(async () => {
+  const pos = await getPosition()
+  if (pos) {
+    windowX.value = pos.x
+    windowY.value = pos.y
+  }
+  unListenFuncs.push(await listen('tauri://move', (event) => {
+    windowX.value = event.payload.payload.x
+    windowY.value = event.payload.payload.y
+  }))
+
   await setupVADModel()
   await setupWhisperModel()
 
@@ -119,6 +208,7 @@ if (import.meta.hot) { // For better DX
   <div
     :class="[modeIndicatorClass, {
       'op-0': shouldHideView,
+      'pointer-events-none': isClickThrough,
     }]"
     max-h="[100vh]"
     max-w="[100vw]"
@@ -128,13 +218,15 @@ if (import.meta.hot) { // For better DX
   >
     <div relative h-full w-full items-end gap-2 class="view">
       <WidgetStage
+        ref="widgetStageRef"
         h-full w-full flex-1
         :focus-at="live2dFocusAt" :scale="scale"
         :x-offset="positionInPercentageString.x"
         :y-offset="positionInPercentageString.y" mb="<md:18"
       />
-      <ResourceStatusIsland />
+      <ResourceStatusIsland ref="resourceStatusIslandRef" />
       <div
+        ref="buttonsContainerRef"
         absolute bottom-4 left-4 flex gap-1 op-0 transition="opacity duration-500"
         :class="{
           'pointer-events-none': windowControlStore.isControlActive,
