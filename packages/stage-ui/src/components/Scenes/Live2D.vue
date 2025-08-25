@@ -24,7 +24,7 @@ withDefaults(defineProps<{
   scale: 1,
 })
 
-const live2dCanvasRef = ref<{ canvasElement: () => HTMLCanvasElement }>()
+const live2dCanvasRef = ref<InstanceType<typeof Live2DCanvas>>()
 
 defineExpose({
   canvasElement: () => {
