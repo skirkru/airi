@@ -31,7 +31,7 @@ const { invoke } = useTauriCore()
 const { connected, serverCmd, serverArgs } = storeToRefs(mcpStore)
 const { scale, positionInPercentageString } = storeToRefs(useLive2d())
 
-const { centerPos, live2dLookAtX, live2dLookAtY, shouldHideView } = storeToRefs(useWindowStore())
+const { centerPos, live2dLookAtX, live2dLookAtY } = storeToRefs(useWindowStore())
 const live2dFocusAt = ref<Point>(centerPos.value)
 const widgetStageRef = ref<{ canvasElement: () => HTMLCanvasElement }>()
 const resourceStatusIslandRef = ref<InstanceType<typeof ResourceStatusIsland>>()
@@ -40,13 +40,9 @@ const windowX = ref(0)
 const windowY = ref(0)
 const isClickThrough = ref(false)
 const isPassingThrough = ref(false)
+const isOverUI = ref(false)
 
 watch([mouseX, mouseY], async ([x, y]) => {
-  if (windowControlStore.isIgnoringMouseEvent) {
-    passThroughCommands.startPassThrough()
-    return
-  }
-
   const canvas = widgetStageRef.value?.canvasElement()
   if (!canvas)
     return
@@ -57,21 +53,28 @@ watch([mouseX, mouseY], async ([x, y]) => {
   const islandEl = resourceStatusIslandRef.value?.$el as HTMLElement
   const buttonsEl = buttonsContainerRef.value
 
-  let isOverUI = false
-  if (islandEl) {
-    const rect = islandEl.getBoundingClientRect()
-    if (relativeX >= rect.left && relativeX <= rect.right && relativeY >= rect.top && relativeY <= rect.bottom)
-      isOverUI = true
-  }
-  if (!isOverUI && buttonsEl) {
-    const rect = buttonsEl.getBoundingClientRect()
-    if (relativeX >= rect.left && relativeX <= rect.right && relativeY >= rect.top && relativeY <= rect.bottom)
-      isOverUI = true
+  isOverUI.value = false
+  if (!windowControlStore.isIgnoringMouseEvent) {
+    if (islandEl) {
+      const rect = islandEl.getBoundingClientRect()
+      if (relativeX >= rect.left && relativeX <= rect.right && relativeY >= rect.top && relativeY <= rect.bottom)
+        isOverUI.value = true
+    }
+    if (!isOverUI.value && buttonsEl) {
+      const rect = buttonsEl.getBoundingClientRect()
+      if (relativeX >= rect.left && relativeX <= rect.right && relativeY >= rect.top && relativeY <= rect.bottom)
+        isOverUI.value = true
+    }
+
+    if (isOverUI.value) {
+      passThroughCommands.stopPassThrough()
+      return
+    }
   }
 
   let isTransparent = false
   if (
-    !isOverUI
+    !isOverUI.value
     && relativeX >= 0
     && relativeX < canvas.clientWidth
     && relativeY >= 0
@@ -97,8 +100,17 @@ watch([mouseX, mouseY], async ([x, y]) => {
       isTransparent = data[3] < 100 // Use a small threshold for anti-aliasing
     }
   }
+  else {
+    isTransparent = true
+  }
 
   isClickThrough.value = isTransparent
+
+  if (windowControlStore.isIgnoringMouseEvent) {
+    passThroughCommands.startPassThrough()
+    return
+  }
+
   if (isTransparent && !isPassingThrough.value) {
     passThroughCommands.startPassThrough()
     isPassingThrough.value = true
@@ -207,8 +219,8 @@ if (import.meta.hot) { // For better DX
 <template>
   <div
     :class="[modeIndicatorClass, {
-      'op-0': shouldHideView,
-      'pointer-events-none': isClickThrough,
+      'op-0': windowControlStore.isIgnoringMouseEvent && !isClickThrough,
+      'pointer-events-none': !isClickThrough,
     }]"
     max-h="[100vh]"
     max-w="[100vw]"
@@ -229,8 +241,8 @@ if (import.meta.hot) { // For better DX
         ref="buttonsContainerRef"
         absolute bottom-4 left-4 flex gap-1 op-0 transition="opacity duration-500"
         :class="{
-          'pointer-events-none': windowControlStore.isControlActive,
-          'show-on-hover': !windowControlStore.isIgnoringMouseEvent,
+          'pointer-events-none': isClickThrough && !isOverUI,
+          'show-on-hover': !windowControlStore.isIgnoringMouseEvent && (!isClickThrough || isOverUI),
         }"
       >
         <div
@@ -304,10 +316,8 @@ if (import.meta.hot) { // For better DX
 .view {
   transition: opacity 0.5s ease-in-out;
 
-  &:hover {
-    .show-on-hover {
-      opacity: 1;
-    }
+  .show-on-hover {
+    opacity: 1;
   }
 }
 
