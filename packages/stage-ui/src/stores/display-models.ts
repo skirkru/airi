@@ -73,7 +73,7 @@ export const useDisplayModelsStore = defineStore('display-models', () => {
 
   async function getDisplayModel(id: string) {
     await until(displayModelsFromIndexedDBLoading).toBe(false)
-    return displayModels.value.find(model => model.id === id)
+    return await localforage.getItem<DisplayModelFile>(id)
   }
 
   async function addDisplayModel(format: DisplayModelFormat, file: File) {
