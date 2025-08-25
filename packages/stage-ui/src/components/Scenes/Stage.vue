@@ -40,8 +40,8 @@ withDefaults(defineProps<{
 const db = ref<DuckDBWasmDrizzleDatabase>()
 // const transformersProvider = createTransformers({ embedWorkerURL })
 
-const vrmViewerRef = ref<{ setExpression: (expression: string) => void, canvasElement: () => HTMLCanvasElement }>()
-const live2dSceneRef = ref<{ canvasElement: () => HTMLCanvasElement }>()
+const vrmViewerRef = ref<InstanceType<typeof VRMScene>>()
+const live2dSceneRef = ref<InstanceType<typeof Live2DScene>>()
 
 const settingsStore = useSettings()
 const { stageModelRenderer, stageViewControlsEnabled, live2dDisableFocus, stageModelSelectedUrl } = storeToRefs(settingsStore)
