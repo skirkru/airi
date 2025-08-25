@@ -246,15 +246,13 @@ watch(trackingMode, (newMode) => {
   }
 })
 
-function canvasElement() {
-  return tresCanvasRef.value?.renderer.value.domElement
-}
-
 defineExpose({
   setExpression: (expression: string) => {
     modelRef.value?.setExpression(expression)
   },
-  canvasElement,
+  canvasElement: () => {
+    return tresCanvasRef.value?.renderer.value.domElement
+  },
 })
 </script>
 
