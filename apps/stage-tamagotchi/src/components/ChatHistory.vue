@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { UserMessagePart } from '@xsai/shared-chat'
+
 import { MarkdownRenderer } from '@proj-airi/stage-ui/components'
 import { useChatStore } from '@proj-airi/stage-ui/stores/chat'
 import { storeToRefs } from 'pinia'
@@ -90,13 +92,23 @@ onTokenLiteral(async () => {
           <div>
             <span text-xs text="cyan-400/90 dark:cyan-600/90" font-normal class="inline <sm:hidden">{{ t('stage.chat.message.character-name.you') }}</span>
           </div>
+          <div v-if="Array.isArray(message.content)" class="flex flex-col gap-2">
+            <template v-for="(part, partIndex) in (message.content as UserMessagePart[])" :key="partIndex">
+              <MarkdownRenderer
+                v-if="part.type === 'text' && part.text"
+                :content="part.text"
+                class="break-words"
+                text="base <sm:xs"
+              />
+              <img v-if="part.type === 'image_url'" :src="part.image_url.url" class="max-w-full rounded-lg">
+            </template>
+          </div>
           <MarkdownRenderer
-            v-if="message.content"
-            :content="message.content as string"
+            v-else-if="typeof message.content === 'string'"
+            :content="message.content"
             class="break-words"
             text="base <sm:xs"
           />
-          <div v-else />
         </div>
       </div>
     </div>

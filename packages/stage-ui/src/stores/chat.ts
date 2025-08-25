@@ -1,5 +1,5 @@
 import type { ChatProvider } from '@xsai-ext/shared-providers'
-import type { Message, SystemMessage } from '@xsai/shared-chat'
+import type { Message, SystemMessage, UserMessagePart } from '@xsai/shared-chat'
 
 import type { ChatAssistantMessage, ChatMessage, ChatSlices } from '../types/chat'
 
@@ -77,18 +77,43 @@ export const useChatStore = defineStore('chat', () => {
 
   const streamingMessage = ref<ChatAssistantMessage>({ role: 'assistant', content: '', slices: [], tool_results: [] })
 
-  async function send(sendingMessage: string, options: { model: string, chatProvider: ChatProvider, providerConfig?: Record<string, unknown> }) {
+  async function send(
+    sendingMessage: string,
+    options: {
+      model: string
+      chatProvider: ChatProvider
+      providerConfig?: Record<string, unknown>
+      attachments?: { type: 'image', data: string, mimeType: string }[]
+    },
+  ) {
     try {
       sending.value = true
 
-      if (!sendingMessage)
+      if (!sendingMessage && !options.attachments?.length)
         return
 
       for (const hook of onBeforeMessageComposedHooks.value) {
         await hook(sendingMessage)
       }
 
-      messages.value.push({ role: 'user', content: sendingMessage })
+      const contentParts: UserMessagePart[] = [{ type: 'text', text: sendingMessage }]
+
+      if (options.attachments) {
+        for (const attachment of options.attachments) {
+          if (attachment.type === 'image') {
+            contentParts.push({
+              type: 'image_url',
+              image_url: {
+                url: `data:${attachment.mimeType};base64,${attachment.data}`,
+              },
+            })
+          }
+        }
+      }
+
+      const finalContent = contentParts.length > 1 ? contentParts : sendingMessage
+
+      messages.value.push({ role: 'user', content: finalContent })
 
       const parser = useLlmmarkerParser({
         onLiteral: async (literal) => {
