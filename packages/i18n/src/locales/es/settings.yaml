@@ -17,7 +17,6 @@ dialogs:
     baseUrl: URL Base
     baseUrlHelp: URL del endpoint de la API (usa el predeterminado si no estás seguro)
     accountId: ID de Cuenta
-    validating: Validando configuración...
     validationFailed: La validación de la configuración falló
     validationError: 'Error de validación: {error}'
     skipForNow: Omitir por ahora
@@ -422,6 +421,9 @@ pages:
       openai:
         description: openai.com
         title: OpenAI
+      openai-compatible:
+        description: OpenAI Compatible
+        title: OpenAI Compatible
       openrouter:
         description: openrouter.ai
         title: OpenRouter
