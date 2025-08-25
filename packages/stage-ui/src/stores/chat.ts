@@ -1,6 +1,7 @@
 import type { ChatProvider } from '@xsai-ext/shared-providers'
 import type { Message, SystemMessage, UserMessagePart } from '@xsai/shared-chat'
 
+import type { StreamEvent } from '../stores/llm'
 import type { ChatAssistantMessage, ChatMessage, ChatSlices } from '../types/chat'
 
 import { defineStore, storeToRefs } from 'pinia'
@@ -180,49 +181,51 @@ export const useChatStore = defineStore('chat', () => {
 
       await stream(options.model, options.chatProvider, newMessages as Message[], {
         headers,
-        onToolCall(toolCall) {
-          toolCallQueue.add({
-            type: 'tool-call',
-            toolCall,
-          })
-        },
-        onToolCallResult(toolCallResult) {
-          toolCallQueue.add({
-            type: 'tool-call-result',
-            id: toolCallResult.id,
-            result: toolCallResult.result,
-          })
-        },
-        async onTextDelta(text) {
-          fullText += text
-          await parser.consume(text)
-        },
-        async onFinish() {
-          // Finalize the parsing of the actual message content
-          await parser.end()
+        async onStreamEvent(event: StreamEvent) {
+          if (event.type === 'tool-call') {
+            toolCallQueue.add({
+              type: 'tool-call',
+              toolCall: event,
+            })
+          }
+          else if (event.type === 'tool-result') {
+            toolCallQueue.add({
+              type: 'tool-call-result',
+              id: event.toolCallId,
+              result: event.result,
+            })
+          }
+          else if (event.type === 'text-delta') {
+            fullText += event.text
+            await parser.consume(event.text)
+          }
+          else if (event.type === 'finish') {
+            // Finalize the parsing of the actual message content
+            await parser.end()
 
-          // Add the completed message to the history only if it has content
-          if (streamingMessage.value.slices.length > 0)
-            messages.value.push(toRaw(streamingMessage.value))
+            // Add the completed message to the history only if it has content
+            if (streamingMessage.value.slices.length > 0)
+              messages.value.push(toRaw(streamingMessage.value))
 
-          // Reset the streaming message for the next turn
-          streamingMessage.value = { role: 'assistant', content: '', slices: [], tool_results: [] }
+            // Reset the streaming message for the next turn
+            streamingMessage.value = { role: 'assistant', content: '', slices: [], tool_results: [] }
 
-          // Instruct the TTS pipeline to flush by calling hooks directly
-          const flushSignal = `${TTS_FLUSH_INSTRUCTION}${TTS_FLUSH_INSTRUCTION}`
-          for (const hook of onTokenLiteralHooks.value)
-            await hook(flushSignal)
+            // Instruct the TTS pipeline to flush by calling hooks directly
+            const flushSignal = `${TTS_FLUSH_INSTRUCTION}${TTS_FLUSH_INSTRUCTION}`
+            for (const hook of onTokenLiteralHooks.value)
+              await hook(flushSignal)
 
-          // Call the end-of-stream hooks
-          for (const hook of onStreamEndHooks.value)
-            await hook()
+            // Call the end-of-stream hooks
+            for (const hook of onStreamEndHooks.value)
+              await hook()
 
-          // Call the end-of-response hooks with the full text
-          for (const hook of onAssistantResponseEndHooks.value)
-            await hook(fullText)
+            // Call the end-of-response hooks with the full text
+            for (const hook of onAssistantResponseEndHooks.value)
+              await hook(fullText)
 
-          // eslint-disable-next-line no-console
-          console.debug('LLM output:', fullText)
+            // eslint-disable-next-line no-console
+            console.debug('LLM output:', fullText)
+          }
         },
       })
 
