@@ -73,13 +73,13 @@ export const useDisplayModelsStore = defineStore('display-models', () => {
 
   async function getDisplayModel(id: string) {
     await until(displayModelsFromIndexedDBLoading).toBe(false)
-  const modelFromFile = await localforage.getItem<DisplayModelFile>(id)
-  if (modelFromFile) {
-    return modelFromFile
-  }
+    const modelFromFile = await localforage.getItem<DisplayModelFile>(id)
+    if (modelFromFile) {
+      return modelFromFile
+    }
 
-  // Fallback to in-memory presets if not found in localforage
-  return displayModelsPresets.find(model => model.id === id)
+    // Fallback to in-memory presets if not found in localforage
+    return displayModelsPresets.find(model => model.id === id)
   }
 
   async function addDisplayModel(format: DisplayModelFormat, file: File) {
