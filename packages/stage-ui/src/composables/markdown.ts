@@ -15,11 +15,12 @@ import { unified } from 'unified'
 type MarkdownProcessor = Processor<any, any, any, any, string>
 
 const processorCache = new Map<string, Promise<MarkdownProcessor>>()
-const langRegex = /^`{5,}\s+(\w+)/gm
+const langRegex = /```(.{2,})\s/g
 
 function extractLangs(markdown: string): BundledLanguage[] {
   const matches = markdown.matchAll(langRegex)
   const langs = new Set<BundledLanguage>()
+  langs.add('python')
   for (const match of matches) {
     if (match[1])
       langs.add(match[1] as BundledLanguage)
