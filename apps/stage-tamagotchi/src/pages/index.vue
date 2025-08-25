@@ -5,6 +5,7 @@ import { WidgetStage } from '@proj-airi/stage-ui/components/scenes'
 import { useLive2d } from '@proj-airi/stage-ui/stores/live2d'
 import { useMcpStore } from '@proj-airi/stage-ui/stores/mcp'
 import { connectServer } from '@proj-airi/tauri-plugin-mcp'
+import { watchThrottled } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
@@ -42,7 +43,7 @@ const isClickThrough = ref(false)
 const isPassingThrough = ref(false)
 const isOverUI = ref(false)
 
-watch([mouseX, mouseY], async ([x, y]) => {
+watchThrottled([mouseX, mouseY], async ([x, y]) => {
   const canvas = widgetStageRef.value?.canvasElement()
   if (!canvas)
     return
@@ -119,7 +120,7 @@ watch([mouseX, mouseY], async ([x, y]) => {
     passThroughCommands.stopPassThrough()
     isPassingThrough.value = false
   }
-})
+}, { throttle: 33 })
 
 watch([live2dLookAtX, live2dLookAtY], ([x, y]) => live2dFocusAt.value = { x, y }, { immediate: true })
 
