@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { RemovableRef } from '@vueuse/core'
-import type { TranscriptionProvider } from '@xsai-ext/shared-providers'
 
 import {
   Alert,
@@ -10,149 +9,51 @@ import {
   ProviderBasicSettings,
   ProviderSettingsContainer,
   ProviderSettingsLayout,
-  TranscriptionPlayground,
 } from '@proj-airi/stage-ui/components'
-import { useHearingStore } from '@proj-airi/stage-ui/stores/modules/hearing'
+import { useProviderValidation } from '@proj-airi/stage-ui/composables/useProviderValidation'
 import { useProvidersStore } from '@proj-airi/stage-ui/stores/providers'
-import { FieldInput } from '@proj-airi/ui'
-import { useDebounceFn } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
-import { computed, onMounted, ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { computed } from 'vue'
 
-const hearingStore = useHearingStore()
+const providerId = 'openai-compatible-audio-transcription'
 const providersStore = useProvidersStore()
 const { providers } = storeToRefs(providersStore) as { providers: RemovableRef<Record<string, any>> }
-const { t } = useI18n()
-const router = useRouter()
 
-// Get provider metadata
-const providerId = 'openai-compatible-audio-transcription'
-const providerMetadata = computed(() => providersStore.getProviderMetadata(providerId))
-const pageTitle = computed(() => providerMetadata.value?.localizedName || t('settings.pages.providers.provider.openai-compatible-audio-transcription.title'))
-
-// Settings refs
+// Define computed properties for credentials
 const apiKey = computed({
   get: () => providers.value[providerId]?.apiKey || '',
-  set: value => (providers.value[providerId] = { ...providers.value[providerId], apiKey: value }),
+  set: (value) => {
+    if (!providers.value[providerId])
+      providers.value[providerId] = {}
+    providers.value[providerId].apiKey = value
+  },
 })
 
 const baseUrl = computed({
   get: () => providers.value[providerId]?.baseUrl || '',
-  set: value => (providers.value[providerId] = { ...providers.value[providerId], baseUrl: value }),
+  set: (value) => {
+    if (!providers.value[providerId])
+      providers.value[providerId] = {}
+    providers.value[providerId].baseUrl = value
+  },
 })
 
-const model = computed({
-  get: () => providers.value[providerId]?.model || 'whisper-1',
-  set: value => (providers.value[providerId] = { ...providers.value[providerId], model: value }),
-})
-
-// Validation state
-const debounceTime = 500
-const isValidating = ref(0)
-const isValid = ref(false)
-const validationMessage = ref('')
-
-// Check if API key is configured
-const apiKeyConfigured = computed(() => !!providers.value[providerId]?.apiKey)
-
-// Generate transcription
-async function handleGenerateTranscription(file: File) {
-  const provider = await providersStore.getProviderInstance<TranscriptionProvider<string>>(providerId)
-  if (!provider)
-    throw new Error('Failed to initialize transcription provider')
-
-  return await hearingStore.transcription(
-    provider,
-    model.value,
-    file,
-    'json',
-  )
-}
-
-// Validation
-async function validateConfiguration() {
-  if (!providerMetadata.value)
-    return
-
-  isValidating.value++
-  validationMessage.value = ''
-  const startValidationTimestamp = performance.now()
-  let finalValidationMessage = ''
-
-  try {
-    const config = {
-      apiKey: apiKey.value.trim(),
-      baseUrl: baseUrl.value.trim(),
-    }
-
-    const validationResult = await providerMetadata.value.validators.validateProviderConfig(config)
-    isValid.value = validationResult.valid
-
-    if (!isValid.value)
-      finalValidationMessage = validationResult.reason
-  }
-  catch (error) {
-    isValid.value = false
-    finalValidationMessage = t('settings.dialogs.onboarding.validationError', {
-      error: error instanceof Error ? error.message : String(error),
-    })
-  }
-  finally {
-    setTimeout(() => {
-      isValidating.value--
-      validationMessage.value = finalValidationMessage
-    }, Math.max(0, debounceTime - (performance.now() - startValidationTimestamp)))
-  }
-}
-
-const debouncedValidateConfiguration = useDebounceFn(() => {
-  if (!apiKey.value.trim()) {
-    isValid.value = false
-    validationMessage.value = ''
-    isValidating.value = 0
-    return
-  }
-  validateConfiguration()
-}, debounceTime)
-
-onMounted(() => {
-  providersStore.initializeProvider(providerId)
-  const config = providers.value[providerId] || {}
-  apiKey.value = config.apiKey || ''
-  baseUrl.value = config.baseUrl || ''
-  model.value = config.model || 'whisper-1'
-
-  if (apiKey.value.trim())
-    validateConfiguration()
-})
-
-watch([apiKey, baseUrl], () => {
-  debouncedValidateConfiguration()
-}, { deep: true })
-
-function handleResetSettings() {
-  const defaults = providerMetadata.value?.defaultOptions?.() || {}
-  providers.value[providerId] = {
-    apiKey: '',
-    baseUrl: defaults.baseUrl || '',
-    model: 'whisper-1',
-  }
-  // Force update refs
-  apiKey.value = ''
-  baseUrl.value = defaults.baseUrl || ''
-  model.value = 'whisper-1'
-  isValid.value = false
-  validationMessage.value = ''
-  isValidating.value = 0
-}
+// Use the composable to get validation logic and state
+const {
+  t,
+  router,
+  providerMetadata,
+  isValidating,
+  isValid,
+  validationMessage,
+  handleResetSettings,
+} = useProviderValidation(providerId)
 </script>
 
 <template>
   <ProviderSettingsLayout
-    :provider-name="pageTitle"
-    :provider-icon="providerMetadata?.icon"
+    :provider-name="providerMetadata?.localizedName"
+    :provider-icon-color="providerMetadata?.iconColor"
     :on-back="() => router.back()"
   >
     <ProviderSettingsContainer>
@@ -166,17 +67,12 @@ function handleResetSettings() {
           :provider-name="providerMetadata?.localizedName"
           placeholder="sk-..."
         />
-        <FieldInput
-          v-model="model"
-          :label="t('settings.pages.modules.consciousness.sections.section.provider-model-selection.manual_model_name')"
-          :placeholder="t('settings.pages.modules.consciousness.sections.section.provider-model-selection.manual_model_placeholder')"
-        />
       </ProviderBasicSettings>
 
       <ProviderAdvancedSettings :title="t('settings.pages.providers.common.section.advanced.title')">
         <ProviderBaseUrlInput
           v-model="baseUrl"
-          placeholder="https://api.example.com/v1/"
+          placeholder="https://api.openai.com/v1/"
         />
       </ProviderAdvancedSettings>
 
@@ -197,19 +93,12 @@ function handleResetSettings() {
         </template>
       </Alert>
     </ProviderSettingsContainer>
-
-    <template #playground>
-      <TranscriptionPlayground
-        :generate-transcription="handleGenerateTranscription"
-        :api-key-configured="apiKeyConfigured"
-      />
-    </template>
   </ProviderSettingsLayout>
 </template>
 
 <route lang="yaml">
-  meta:
-    layout: settings
-    stageTransition:
-      name: slide
-  </route>
+meta:
+  layout: settings
+  stageTransition:
+    name: slide
+</route>
