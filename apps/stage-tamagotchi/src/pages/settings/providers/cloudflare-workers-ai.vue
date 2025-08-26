@@ -2,6 +2,7 @@
 import type { RemovableRef } from '@vueuse/core'
 
 import {
+  Alert,
   ProviderAccountIdInput,
   ProviderApiKeyInput,
   ProviderBasicSettings,
@@ -9,8 +10,9 @@ import {
   ProviderSettingsLayout,
 } from '@proj-airi/stage-ui/components'
 import { useProvidersStore } from '@proj-airi/stage-ui/stores/providers'
+import { useDebounceFn } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
@@ -44,6 +46,58 @@ const accountId = computed({
   },
 })
 
+// Validation state
+const debounceTime = 500
+const isValidating = ref(0)
+const isValid = ref(false)
+const validationMessage = ref('')
+
+// Validation
+async function validateConfiguration() {
+  if (!providerMetadata.value)
+    return
+
+  isValidating.value++
+  validationMessage.value = ''
+  const startValidationTimestamp = performance.now()
+  let finalValidationMessage = ''
+
+  try {
+    const config = {
+      apiKey: apiKey.value.trim(),
+      accountId: accountId.value.trim(),
+    }
+
+    const validationResult = await providerMetadata.value.validators.validateProviderConfig(config)
+    isValid.value = validationResult.valid
+
+    if (!isValid.value)
+      finalValidationMessage = validationResult.reason
+  }
+  catch (error) {
+    isValid.value = false
+    finalValidationMessage = t('settings.dialogs.onboarding.validationError', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+  finally {
+    setTimeout(() => {
+      isValidating.value--
+      validationMessage.value = finalValidationMessage
+    }, Math.max(0, debounceTime - (performance.now() - startValidationTimestamp)))
+  }
+}
+
+const debouncedValidateConfiguration = useDebounceFn(() => {
+  if (!apiKey.value.trim() || !accountId.value.trim()) {
+    isValid.value = false
+    validationMessage.value = ''
+    isValidating.value = 0
+    return
+  }
+  validateConfiguration()
+}, debounceTime)
+
 onMounted(() => {
   // Initialize provider if it doesn't exist
   providersStore.initializeProvider(providerId)
@@ -51,6 +105,9 @@ onMounted(() => {
   // Initialize refs with current values
   apiKey.value = providers.value[providerId]?.apiKey || ''
   accountId.value = providers.value[providerId]?.accountId || ''
+
+  if (apiKey.value.trim() && accountId.value.trim())
+    validateConfiguration()
 })
 
 // Watch settings and update the provider configuration
@@ -60,12 +117,16 @@ watch([apiKey, accountId], () => {
     apiKey: apiKey.value,
     accountId: accountId.value,
   }
-})
+  debouncedValidateConfiguration()
+}, { deep: true })
 
 function handleResetSettings() {
   providers.value[providerId] = {
     ...(providerMetadata.value?.defaultOptions as any),
   }
+  isValid.value = false
+  validationMessage.value = ''
+  isValidating.value = 0
 }
 </script>
 
@@ -94,6 +155,23 @@ function handleResetSettings() {
           :placeholder="t('settings.pages.providers.provider.cloudflare-workers-ai.fields.field.account-id.placeholder')"
         />
       </ProviderBasicSettings>
+
+      <!-- Validation Status -->
+      <Alert v-if="!isValid && isValidating === 0 && validationMessage" type="error">
+        <template #title>
+          {{ t('settings.dialogs.onboarding.validationFailed') }}
+        </template>
+        <template v-if="validationMessage" #content>
+          <div class="whitespace-pre-wrap break-all">
+            {{ validationMessage }}
+          </div>
+        </template>
+      </Alert>
+      <Alert v-if="isValid && isValidating === 0" type="success">
+        <template #title>
+          {{ t('settings.dialogs.onboarding.validationSuccess') }}
+        </template>
+      </Alert>
     </ProviderSettingsContainer>
   </ProviderSettingsLayout>
 </template>

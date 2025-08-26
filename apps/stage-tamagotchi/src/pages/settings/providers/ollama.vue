@@ -11,6 +11,7 @@ import {
 } from '@proj-airi/stage-ui/components'
 import { useProvidersStore } from '@proj-airi/stage-ui/stores/providers'
 import { FieldKeyValues } from '@proj-airi/ui'
+import { useDebounceFn } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -25,8 +26,6 @@ const { providers } = storeToRefs(providersStore) as { providers: RemovableRef<R
 const providerId = 'ollama'
 const providerMetadata = computed(() => providersStore.getProviderMetadata(providerId))
 
-const validationMessage = ref('')
-
 const baseUrl = computed({
   get: () => providers.value[providerId]?.baseUrl || providerMetadata.value?.defaultOptions?.().baseUrl || '',
   set: (value) => {
@@ -37,7 +36,13 @@ const baseUrl = computed({
   },
 })
 
-const headers = ref<{ key: string, value: string }[]>(Object.entries(providers.value[providerId]?.headers).map(([key, value]) => ({ key, value } as { key: string, value: string })) || [{ key: '', value: '' }])
+const headers = ref<{ key: string, value: string }[]>(Object.entries(providers.value[providerId]?.headers || {}).map(([key, value]) => ({ key, value } as { key: string, value: string })) || [{ key: '', value: '' }])
+
+// Validation state
+const debounceTime = 500
+const isValidating = ref(0)
+const isValid = ref(false)
+const validationMessage = ref('')
 
 function addKeyValue(headers: { key: string, value: string }[], key: string, value: string) {
   if (!headers)
@@ -59,45 +64,73 @@ function removeKeyValue(index: number, headers: { key: string, value: string }[]
   }
 }
 
-watch(headers, (headers) => {
-  if (headers.length > 0 && (headers[headers.length - 1].key !== '' || headers[headers.length - 1].value !== '')) {
-    headers.push({ key: '', value: '' })
+// Validation
+async function validateConfiguration() {
+  if (!providerMetadata.value)
+    return
+
+  isValidating.value++
+  validationMessage.value = ''
+  const startValidationTimestamp = performance.now()
+  let finalValidationMessage = ''
+
+  try {
+    const config = {
+      baseUrl: baseUrl.value.trim(),
+      headers: headers.value.filter(header => header.key !== '').reduce((acc, header) => {
+        acc[header.key] = header.value
+        return acc
+      }, {} as Record<string, string>),
+    }
+
+    const validationResult = await providerMetadata.value.validators.validateProviderConfig(config)
+    isValid.value = validationResult.valid
+
+    if (!isValid.value)
+      finalValidationMessage = validationResult.reason
+  }
+  catch (error) {
+    isValid.value = false
+    finalValidationMessage = t('settings.dialogs.onboarding.validationError', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+  finally {
+    setTimeout(() => {
+      isValidating.value--
+      validationMessage.value = finalValidationMessage
+    }, Math.max(0, debounceTime - (performance.now() - startValidationTimestamp)))
+  }
+}
+
+const debouncedValidateConfiguration = useDebounceFn(() => {
+  if (!baseUrl.value.trim()) {
+    isValid.value = false
+    validationMessage.value = ''
+    isValidating.value = 0
+    return
+  }
+  validateConfiguration()
+}, debounceTime)
+
+watch(headers, (newHeaders) => {
+  if (newHeaders.length > 0 && (newHeaders[newHeaders.length - 1].key !== '' || newHeaders[newHeaders.length - 1].value !== '')) {
+    newHeaders.push({ key: '', value: '' })
   }
 
-  providers.value[providerId].headers = headers.filter(header => header.key !== '').reduce((acc, header) => {
+  providers.value[providerId].headers = newHeaders.filter(header => header.key !== '').reduce((acc, header) => {
     acc[header.key] = header.value
     return acc
   }, {} as Record<string, string>)
+  debouncedValidateConfiguration()
 }, {
   deep: true,
   immediate: true,
 })
 
-async function refetch() {
-  try {
-    const validationResult = await providerMetadata.value.validators.validateProviderConfig({
-      baseUrl: baseUrl.value,
-      headers: headers.value.filter(header => header.key !== '').reduce((acc, header) => {
-        acc[header.key] = header.value
-        return acc
-      }, {} as Record<string, string>),
-    })
-
-    if (!validationResult.valid) {
-      validationMessage.value = t('settings.dialogs.onboarding.validationError', {
-        error: validationResult.reason,
-      })
-    }
-  }
-  catch (error) {
-    validationMessage.value = t('settings.dialogs.onboarding.validationError', {
-      error: error instanceof Error ? error.message : String(error),
-    })
-  }
-}
-
-watch([baseUrl, headers], refetch, { immediate: true })
-watch(headers, refetch, { deep: true })
+watch(baseUrl, () => {
+  debouncedValidateConfiguration()
+})
 
 onMounted(() => {
   providersStore.initializeProvider(providerId)
@@ -112,26 +145,22 @@ onMounted(() => {
   if (headers.value.length === 0) {
     headers.value = [{ key: '', value: '' }]
   }
+
+  if (baseUrl.value.trim())
+    validateConfiguration()
 })
 
 function handleResetSettings() {
   providers.value[providerId] = {
     ...(providerMetadata.value?.defaultOptions as any),
   }
+  isValid.value = false
+  validationMessage.value = ''
+  isValidating.value = 0
 }
 </script>
 
 <template>
-  <Alert v-if="validationMessage" type="error">
-    <template #title>
-      {{ t('settings.dialogs.onboarding.validationFailed') }}
-    </template>
-    <template v-if="validationMessage" #content>
-      <div class="whitespace-pre-wrap break-all">
-        {{ validationMessage }}
-      </div>
-    </template>
-  </Alert>
   <ProviderSettingsLayout
     :provider-name="providerMetadata?.localizedName"
     :provider-icon="providerMetadata?.icon"
@@ -161,6 +190,23 @@ function handleResetSettings() {
           @remove="(index: number) => removeKeyValue(index, headers)"
         />
       </ProviderAdvancedSettings>
+
+      <!-- Validation Status -->
+      <Alert v-if="!isValid && isValidating === 0 && validationMessage" type="error">
+        <template #title>
+          {{ t('settings.dialogs.onboarding.validationFailed') }}
+        </template>
+        <template v-if="validationMessage" #content>
+          <div class="whitespace-pre-wrap break-all">
+            {{ validationMessage }}
+          </div>
+        </template>
+      </Alert>
+      <Alert v-if="isValid && isValidating === 0" type="success">
+        <template #title>
+          {{ t('settings.dialogs.onboarding.validationSuccess') }}
+        </template>
+      </Alert>
     </ProviderSettingsContainer>
   </ProviderSettingsLayout>
 </template>

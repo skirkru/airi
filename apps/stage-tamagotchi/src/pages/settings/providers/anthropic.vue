@@ -2,6 +2,7 @@
 import type { RemovableRef } from '@vueuse/core'
 
 import {
+  Alert,
   ProviderAdvancedSettings,
   ProviderApiKeyInput,
   ProviderBaseUrlInput,
@@ -10,8 +11,9 @@ import {
   ProviderSettingsLayout,
 } from '@proj-airi/stage-ui/components'
 import { useProvidersStore } from '@proj-airi/stage-ui/stores/providers'
+import { useDebounceFn } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
@@ -45,6 +47,58 @@ const baseUrl = computed({
   },
 })
 
+// Validation state
+const debounceTime = 500
+const isValidating = ref(0)
+const isValid = ref(false)
+const validationMessage = ref('')
+
+// Validation
+async function validateConfiguration() {
+  if (!providerMetadata.value)
+    return
+
+  isValidating.value++
+  validationMessage.value = ''
+  const startValidationTimestamp = performance.now()
+  let finalValidationMessage = ''
+
+  try {
+    const config = {
+      apiKey: apiKey.value.trim(),
+      baseUrl: baseUrl.value.trim(),
+    }
+
+    const validationResult = await providerMetadata.value.validators.validateProviderConfig(config)
+    isValid.value = validationResult.valid
+
+    if (!isValid.value)
+      finalValidationMessage = validationResult.reason
+  }
+  catch (error) {
+    isValid.value = false
+    finalValidationMessage = t('settings.dialogs.onboarding.validationError', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+  finally {
+    setTimeout(() => {
+      isValidating.value--
+      validationMessage.value = finalValidationMessage
+    }, Math.max(0, debounceTime - (performance.now() - startValidationTimestamp)))
+  }
+}
+
+const debouncedValidateConfiguration = useDebounceFn(() => {
+  if (!apiKey.value.trim()) {
+    isValid.value = false
+    validationMessage.value = ''
+    isValidating.value = 0
+    return
+  }
+  validateConfiguration()
+}, debounceTime)
+
 onMounted(() => {
   // Initialize provider if it doesn't exist
   if (!providers.value[providerId]) {
@@ -56,6 +110,9 @@ onMounted(() => {
   // Initialize refs with current values
   apiKey.value = providers.value[providerId]?.apiKey || ''
   baseUrl.value = providers.value[providerId]?.baseUrl || 'https://api.anthropic.com/v1/'
+
+  if (apiKey.value.trim())
+    validateConfiguration()
 })
 
 // Watch settings and update the provider configuration
@@ -65,12 +122,16 @@ watch([apiKey, baseUrl], () => {
     apiKey: apiKey.value,
     baseUrl: baseUrl.value || 'https://api.anthropic.com/v1/',
   }
-})
+  debouncedValidateConfiguration()
+}, { deep: true })
 
 function handleResetSettings() {
   providers.value[providerId] = {
     baseUrl: 'https://api.anthropic.com/v1/',
   }
+  isValid.value = false
+  validationMessage.value = ''
+  isValidating.value = 0
 }
 </script>
 
@@ -80,21 +141,6 @@ function handleResetSettings() {
     :provider-icon="providerMetadata?.icon"
     :on-back="() => router.back()"
   >
-    <div bg="orange-50 dark:orange-900/20" rounded-xl p-4 flex="~ col gap-3">
-      <h2 text-xl font-normal text="orange-700 dark:orange-500">
-        Before you start
-      </h2>
-      <p>
-        While Anthropic recently did announce that they are having a beta support for
-        OpenAI SDK compatibility <a underline href="https://docs.anthropic.com/en/api/openai-sdk">(you can read more here)</a>,
-        but due to the implementation details comes with <a underline href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS">CORS</a>
-        restrictions which not aligned with the OpenAI SDK, it's currently not possible to use this provider in the browser.
-      </p>
-      <p>
-        If you do need to use this provider, you will need a dedicated proxy backend like a Serverless Function running on
-        <a underline href="https://workers.cloudflare.com/">Cloudflare Workers</a> or some CORS bypassing services to bypass the CORS restrictions.
-      </p>
-    </div>
     <ProviderSettingsContainer>
       <ProviderBasicSettings
         :title="t('settings.pages.providers.common.section.basic.title')"
@@ -114,6 +160,23 @@ function handleResetSettings() {
           placeholder="https://api.anthropic.com/v1/"
         />
       </ProviderAdvancedSettings>
+
+      <!-- Validation Status -->
+      <Alert v-if="!isValid && isValidating === 0 && validationMessage" type="error">
+        <template #title>
+          {{ t('settings.dialogs.onboarding.validationFailed') }}
+        </template>
+        <template v-if="validationMessage" #content>
+          <div class="whitespace-pre-wrap break-all">
+            {{ validationMessage }}
+          </div>
+        </template>
+      </Alert>
+      <Alert v-if="isValid && isValidating === 0" type="success">
+        <template #title>
+          {{ t('settings.dialogs.onboarding.validationSuccess') }}
+        </template>
+      </Alert>
     </ProviderSettingsContainer>
   </ProviderSettingsLayout>
 </template>

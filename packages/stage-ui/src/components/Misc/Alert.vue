@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 
 const props = defineProps<{
-  type?: 'error' | 'warning'
+  type?: 'error' | 'warning' | 'success'
 }>()
 
 const containerClass = computed(() => {
@@ -11,6 +11,8 @@ const containerClass = computed(() => {
       return 'border-solid border-2 border-red-200 bg-red-50 dark:border-red-800/30 dark:bg-red-900/20'
     case 'warning':
       return 'border-solid border-2 border-amber-200 bg-amber-50 dark:border-amber-800/30 dark:bg-amber-900/20'
+    case 'success':
+      return 'border-solid border-2 border-green-200 bg-green-50 dark:border-green-800/30 dark:bg-green-900/20'
   }
   return ''
 })
@@ -21,6 +23,8 @@ const iconClass = computed(() => {
       return 'i-solar:close-circle-bold-duotone text-red-500 dark:text-red-400'
     case 'warning':
       return 'i-solar:danger-circle-bold-duotone text-amber-500 dark:text-amber-400'
+    case 'success':
+      return 'i-solar:check-circle-bold-duotone text-green-500 dark:text-green-400'
   }
   return ''
 })
@@ -31,6 +35,8 @@ const titleClass = computed(() => {
       return 'text-red-500 dark:text-red-400'
     case 'warning':
       return 'text-amber-500 dark:text-amber-400'
+    case 'success':
+      return 'text-green-500 dark:text-green-400'
   }
   return ''
 })

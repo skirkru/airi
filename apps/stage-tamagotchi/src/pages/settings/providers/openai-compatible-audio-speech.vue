@@ -3,6 +3,7 @@ import type { RemovableRef } from '@vueuse/core'
 import type { SpeechProvider } from '@xsai-ext/shared-providers'
 
 import {
+  Alert,
   ProviderAdvancedSettings,
   ProviderApiKeyInput,
   ProviderBaseUrlInput,
@@ -14,6 +15,7 @@ import {
 import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
 import { useProvidersStore } from '@proj-airi/stage-ui/stores/providers'
 import { FieldRange } from '@proj-airi/ui'
+import { useDebounceFn } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -68,6 +70,12 @@ const voice = computed({
 
 const speed = ref<number>(1.0)
 
+// Validation state
+const debounceTime = 500
+const isValidating = ref(0)
+const isValid = ref(false)
+const validationMessage = ref('')
+
 // Check if API key is configured
 const apiKeyConfigured = computed(() => !!providers.value[providerId]?.apiKey)
 
@@ -92,6 +100,52 @@ async function handleGenerateSpeech(input: string, voiceId: string, _useSSML: bo
   )
 }
 
+// Validation
+async function validateConfiguration() {
+  if (!providerMetadata.value)
+    return
+
+  isValidating.value++
+  validationMessage.value = ''
+  const startValidationTimestamp = performance.now()
+  let finalValidationMessage = ''
+
+  try {
+    const config = {
+      apiKey: apiKey.value.trim(),
+      baseUrl: baseUrl.value.trim(),
+    }
+
+    const validationResult = await providerMetadata.value.validators.validateProviderConfig(config)
+    isValid.value = validationResult.valid
+
+    if (!isValid.value)
+      finalValidationMessage = validationResult.reason
+  }
+  catch (error) {
+    isValid.value = false
+    finalValidationMessage = t('settings.dialogs.onboarding.validationError', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+  finally {
+    setTimeout(() => {
+      isValidating.value--
+      validationMessage.value = finalValidationMessage
+    }, Math.max(0, debounceTime - (performance.now() - startValidationTimestamp)))
+  }
+}
+
+const debouncedValidateConfiguration = useDebounceFn(() => {
+  if (!apiKey.value.trim()) {
+    isValid.value = false
+    validationMessage.value = ''
+    isValidating.value = 0
+    return
+  }
+  validateConfiguration()
+}, debounceTime)
+
 onMounted(() => {
   providersStore.initializeProvider(providerId)
   const config = providers.value[providerId] || {}
@@ -100,7 +154,14 @@ onMounted(() => {
   model.value = config.model || 'tts-1'
   voice.value = config.voice || 'alloy'
   speed.value = config.speed || 1.0
+
+  if (apiKey.value.trim())
+    validateConfiguration()
 })
+
+watch([apiKey, baseUrl], () => {
+  debouncedValidateConfiguration()
+}, { deep: true })
 
 watch(speed, (newSpeed) => {
   if (providers.value[providerId])
@@ -122,6 +183,9 @@ function handleResetSettings() {
   model.value = 'tts-1'
   voice.value = 'alloy'
   speed.value = 1.0
+  isValid.value = false
+  validationMessage.value = ''
+  isValidating.value = 0
 }
 </script>
 
@@ -157,6 +221,23 @@ function handleResetSettings() {
           :max="2.0" :step="0.01"
         />
       </ProviderAdvancedSettings>
+
+      <!-- Validation Status -->
+      <Alert v-if="!isValid && isValidating === 0 && validationMessage" type="error">
+        <template #title>
+          {{ t('settings.dialogs.onboarding.validationFailed') }}
+        </template>
+        <template v-if="validationMessage" #content>
+          <div class="whitespace-pre-wrap break-all">
+            {{ validationMessage }}
+          </div>
+        </template>
+      </Alert>
+      <Alert v-if="isValid && isValidating === 0" type="success">
+        <template #title>
+          {{ t('settings.dialogs.onboarding.validationSuccess') }}
+        </template>
+      </Alert>
     </ProviderSettingsContainer>
 
     <SpeechPlaygroundOpenAICompatible
