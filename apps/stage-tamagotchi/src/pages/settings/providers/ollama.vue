@@ -58,7 +58,17 @@ const {
         />
       </ProviderBasicSettings>
 
-      <ProviderAdvancedSettings :title="t('settings.pages.providers.common.section.advanced.title')" />
+      <ProviderAdvancedSettings :title="t('settings.pages.providers.common.section.advanced.title')">
+        <FieldKeyValues
+          v-model="headers"
+          :label="t('settings.pages.providers.common.section.advanced.fields.field.headers.label')"
+          :description="t('settings.pages.providers.common.section.advanced.fields.field.headers.description')"
+          :key-placeholder="t('settings.pages.providers.common.section.advanced.fields.field.headers.key.placeholder')"
+          :value-placeholder="t('settings.pages.providers.common.section.advanced.fields.field.headers.value.placeholder')"
+          @add="(key: string, value: string) => addKeyValue(headers, key, value)"
+          @remove="(index: number) => removeKeyValue(index, headers)"
+        />
+      </ProviderAdvancedSettings>
 
       <!-- Validation Status -->
       <Alert v-if="!isValid && isValidating === 0 && validationMessage" type="error">
