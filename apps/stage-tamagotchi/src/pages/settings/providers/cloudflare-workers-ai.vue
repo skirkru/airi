@@ -3,11 +3,11 @@ import type { RemovableRef } from '@vueuse/core'
 
 import {
   Alert,
+  ProviderAccountIdInput,
   ProviderApiKeyInput,
   ProviderBasicSettings,
   ProviderSettingsContainer,
   ProviderSettingsLayout,
-  ProviderTextInput,
 } from '@proj-airi/stage-ui/components'
 import { useProviderValidation } from '@proj-airi/stage-ui/composables/useProviderValidation'
 import { useProvidersStore } from '@proj-airi/stage-ui/stores/providers'
@@ -64,12 +64,14 @@ const {
         <ProviderApiKeyInput
           v-model="apiKey"
           :provider-name="providerMetadata?.localizedName"
-          placeholder="••••••••••••••••••••"
+          :placeholder="t('settings.pages.providers.provider.cloudflare-workers-ai.fields.field.api-key.placeholder')"
         />
-        <ProviderTextInput
+
+        <ProviderAccountIdInput
           v-model="accountId"
-          :label="t('settings.pages.providers.provider.cloudflare-workers-ai.form.accountId.label')"
-          :placeholder="t('settings.pages.providers.provider.cloudflare-workers-ai.form.accountId.placeholder')"
+          :label="t('settings.pages.providers.provider.cloudflare-workers-ai.fields.field.account-id.label')"
+          :description="t('settings.pages.providers.provider.cloudflare-workers-ai.fields.field.account-id.description')"
+          :placeholder="t('settings.pages.providers.provider.cloudflare-workers-ai.fields.field.account-id.placeholder')"
         />
       </ProviderBasicSettings>
 

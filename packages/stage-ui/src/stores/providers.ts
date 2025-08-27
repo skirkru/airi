@@ -1153,8 +1153,9 @@ export const useProvidersStore = defineStore('providers', () => {
             !config.baseUrl && new Error('Base URL is required. Default to http://localhost:11996/tts for Index-TTS.'),
           ].filter(Boolean)
 
-          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
-            return notBaseUrlError.value
+          const res = baseUrlValidator.value(config.baseUrl)
+          if (res) {
+            return res
           }
 
           return {
@@ -1291,8 +1292,9 @@ export const useProvidersStore = defineStore('providers', () => {
             !((config.app as any)?.appId) && new Error('App ID is required.'),
           ].filter(Boolean)
 
-          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
-            return notBaseUrlError.value
+          const res = baseUrlValidator.value(config.baseUrl)
+          if (res) {
+            return res
           }
 
           return {
