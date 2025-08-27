@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { RemovableRef } from '@vueuse/core'
+import type { TranscriptionProvider } from '@xsai-ext/shared-providers'
 
 import {
   Alert,
@@ -9,13 +10,17 @@ import {
   ProviderBasicSettings,
   ProviderSettingsContainer,
   ProviderSettingsLayout,
+  TranscriptionPlayground,
 } from '@proj-airi/stage-ui/components'
 import { useProviderValidation } from '@proj-airi/stage-ui/composables/useProviderValidation'
+import { useHearingStore } from '@proj-airi/stage-ui/stores/modules/hearing'
 import { useProvidersStore } from '@proj-airi/stage-ui/stores/providers'
+import { FieldInput } from '@proj-airi/ui'
 import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
 
 const providerId = 'openai-compatible-audio-transcription'
+const hearingStore = useHearingStore()
 const providersStore = useProvidersStore()
 const { providers } = storeToRefs(providersStore) as { providers: RemovableRef<Record<string, any>> }
 
@@ -37,6 +42,32 @@ const baseUrl = computed({
     providers.value[providerId].baseUrl = value
   },
 })
+
+const model = computed({
+  get: () => providers.value[providerId]?.model || '',
+  set: (value) => {
+    if (!providers.value[providerId])
+      providers.value[providerId] = {}
+    providers.value[providerId].model = value
+  },
+})
+
+// Check if API key is configured
+const apiKeyConfigured = computed(() => !!providers.value[providerId]?.apiKey)
+
+// Generate transcription
+async function handleGenerateTranscription(file: File) {
+  const provider = await providersStore.getProviderInstance<TranscriptionProvider<string>>(providerId)
+  if (!provider)
+    throw new Error('Failed to initialize transcription provider')
+
+  return await hearingStore.transcription(
+    provider,
+    model.value,
+    file,
+    'json',
+  )
+}
 
 // Use the composable to get validation logic and state
 const {
@@ -67,6 +98,11 @@ const {
           :provider-name="providerMetadata?.localizedName"
           placeholder="sk-..."
         />
+        <FieldInput
+          v-model="model"
+          :label="t('settings.pages.modules.consciousness.sections.section.provider-model-selection.manual_model_name')"
+          :placeholder="t('settings.pages.modules.consciousness.sections.section.provider-model-selection.manual_model_placeholder')"
+        />
       </ProviderBasicSettings>
 
       <ProviderAdvancedSettings :title="t('settings.pages.providers.common.section.advanced.title')">
@@ -93,6 +129,11 @@ const {
         </template>
       </Alert>
     </ProviderSettingsContainer>
+
+    <TranscriptionPlayground
+      :generate-transcription="handleGenerateTranscription"
+      :api-key-configured="apiKeyConfigured"
+    />
   </ProviderSettingsLayout>
 </template>
 
