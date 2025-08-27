@@ -210,7 +210,7 @@ export const useProvidersStore = defineStore('providers', () => {
     return null
   })
 
-  async function isTauriTamagotchi() {
+  async function isTauriInWindow() {
     if ('window' in globalThis && globalThis.window != null) {
       if ('__TAURI__' in globalThis.window && globalThis.window.__TAURI__ != null) {
         return true
@@ -258,7 +258,7 @@ export const useProvidersStore = defineStore('providers', () => {
       description: 'https://github.com/huggingface/candle',
       category: 'speech',
       tasks: ['text-to-speech', 'tts'],
-      isAvailableBy: isTauriTamagotchi,
+      isAvailableBy: isTauriInWindow,
       creator: createOpenAI,
       validation: [],
       validators: {
@@ -288,7 +288,7 @@ export const useProvidersStore = defineStore('providers', () => {
       description: 'https://github.com/huggingface/candle',
       category: 'transcription',
       tasks: ['speech-to-text', 'automatic-speech-recognition', 'asr', 'stt'],
-      isAvailableBy: isTauriTamagotchi,
+      isAvailableBy: isTauriInWindow,
       creator: createOpenAI,
       validation: [],
       validators: {

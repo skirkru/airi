@@ -2,7 +2,7 @@ import type { ModelInfo, ProviderMetadata } from '../providers'
 
 import { listModels } from '@xsai/model'
 
-import { isAbsoluteUrl } from '../../utils/string'
+import { isUrl } from '../../utils/url'
 
 type ProviderCreator = (apiKey: string, baseUrl: string) => any
 
@@ -61,8 +61,12 @@ export function buildOpenAICompatibleProvider(
         errors.push(new Error('Base URL is required'))
       }
 
-      if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
+      if (!isUrl(config.baseUrl as string) || new URL(config.baseUrl as string).host.length === 0) {
         errors.push(new Error('Base URL is not absolute. Check your input.'))
+      }
+
+      if (!(config.baseUrl as string).endsWith('/')) {
+        errors.push(new Error('Base URL must end with a trailing slash (/).'))
       }
 
       if (errors.length > 0) {
