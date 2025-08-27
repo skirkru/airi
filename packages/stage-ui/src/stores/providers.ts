@@ -53,7 +53,7 @@ import {
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { isAbsoluteUrl } from '../utils/string'
+import { isUrl } from '../utils/url'
 import { models as elevenLabsModels } from './providers/elevenlabs/list-models'
 import { buildOpenAICompatibleProvider } from './providers/openai-compatible-builder'
 
@@ -186,11 +186,29 @@ function createAnthropic(apiKey: string, baseURL: string = 'https://api.anthropi
 export const useProvidersStore = defineStore('providers', () => {
   const providerCredentials = useLocalStorage<Record<string, Record<string, unknown>>>('settings/credentials/providers', {})
   const { t } = useI18n()
-  const notBaseUrlError = computed(() => ({
-    errors: [new Error('Base URL is not absolute')],
-    reason: 'Base URL is not absolute. Check your input.',
-    valid: false,
-  }))
+  const baseUrlValidator = computed(() => (baseUrl: unknown) => {
+    let msg = ''
+    if (!baseUrl) {
+      msg = 'Base URL is required.'
+    }
+    else if (typeof baseUrl !== 'string') {
+      msg = 'Base URL must be a string.'
+    }
+    else if (!isUrl(baseUrl) || new URL(baseUrl).host.length === 0) {
+      msg = 'Base URL is not absolute. Try to include a scheme (http:// or https://).'
+    }
+    else if (!baseUrl.endsWith('/')) {
+      msg = 'Base URL must end with a trailing slash (/).'
+    }
+    if (msg) {
+      return {
+        errors: [new Error(msg)],
+        reason: msg,
+        valid: false,
+      }
+    }
+    return null
+  })
 
   async function isTauriTamagotchi() {
     if ('window' in globalThis && globalThis.window != null) {
@@ -390,8 +408,9 @@ export const useProvidersStore = defineStore('providers', () => {
             }
           }
 
-          if (!isAbsoluteUrl(config.baseUrl as string)) {
-            return notBaseUrlError.value
+          const res = baseUrlValidator.value(config.baseUrl)
+          if (res) {
+            return res
           }
 
           // Check if the Ollama server is reachable
@@ -456,8 +475,9 @@ export const useProvidersStore = defineStore('providers', () => {
             }
           }
 
-          if (!isAbsoluteUrl(config.baseUrl as string)) {
-            return notBaseUrlError.value
+          const res = baseUrlValidator.value(config.baseUrl)
+          if (res) {
+            return res
           }
 
           // Check if the Ollama server is reachable
@@ -551,8 +571,9 @@ export const useProvidersStore = defineStore('providers', () => {
             }
           }
 
-          if (!isAbsoluteUrl(config.baseUrl as string)) {
-            return notBaseUrlError.value
+          const res = baseUrlValidator.value(config.baseUrl)
+          if (res) {
+            return res
           }
 
           // Check if the vLLM is reachable
@@ -626,6 +647,11 @@ export const useProvidersStore = defineStore('providers', () => {
               reason: 'Base URL is required. Default to http://localhost:1234/v1/ for LM Studio.',
               valid: false,
             }
+          }
+
+          const res = baseUrlValidator.value(config.baseUrl)
+          if (res) {
+            return res
           }
 
           // Check if the LM Studio server is reachable
@@ -762,8 +788,9 @@ export const useProvidersStore = defineStore('providers', () => {
             !config.baseUrl && new Error('Base URL is required. Default to https://api.openai.com/v1/ for official OpenAI API.'),
           ].filter(Boolean)
 
-          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
-            return notBaseUrlError.value
+          const res = baseUrlValidator.value(config.baseUrl)
+          if (res) {
+            return res
           }
 
           return {
@@ -808,8 +835,9 @@ export const useProvidersStore = defineStore('providers', () => {
             !config.baseUrl && new Error('Base URL is required. Default to https://api.openai.com/v1/ for official OpenAI API.'),
           ].filter(Boolean)
 
-          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
-            return notBaseUrlError.value
+          const res = baseUrlValidator.value(config.baseUrl)
+          if (res) {
+            return res
           }
 
           return {
@@ -998,8 +1026,9 @@ export const useProvidersStore = defineStore('providers', () => {
             !config.baseUrl && new Error('Base URL is required.'),
           ].filter(Boolean)
 
-          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
-            return notBaseUrlError.value
+          const res = baseUrlValidator.value(config.baseUrl)
+          if (res) {
+            return res
           }
 
           return {
@@ -1062,8 +1091,9 @@ export const useProvidersStore = defineStore('providers', () => {
             !config.baseUrl && new Error('Base URL is required.'),
           ].filter(Boolean)
 
-          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
-            return notBaseUrlError.value
+          const res = baseUrlValidator.value(config.baseUrl)
+          if (res) {
+            return res
           }
 
           return {
@@ -1195,8 +1225,9 @@ export const useProvidersStore = defineStore('providers', () => {
             !config.baseUrl && new Error('Base URL is required.'),
           ].filter(Boolean)
 
-          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
-            return notBaseUrlError.value
+          const res = baseUrlValidator.value(config.baseUrl)
+          if (res) {
+            return res
           }
 
           return {
@@ -1411,12 +1442,13 @@ export const useProvidersStore = defineStore('providers', () => {
             }
           }
 
-          if (!isAbsoluteUrl(config.baseUrl as string)) {
-            return notBaseUrlError.value
+          const res = baseUrlValidator.value(config.baseUrl)
+          if (res) {
+            return res
           }
 
           // Check if the local running Player 2 is reachable
-          return await fetch(`${(config.baseUrl as string).endsWith('/') ? (config.baseUrl as string).slice(0, -1) : config.baseUrl}/health`, {
+          return await fetch(`${config.baseUrl}health`, {
             method: 'GET',
             headers: {
               'player2-game-key': 'airi',
@@ -1521,8 +1553,9 @@ export const useProvidersStore = defineStore('providers', () => {
             }
           }
 
-          if (!isAbsoluteUrl(config.baseUrl as string)) {
-            return notBaseUrlError.value
+          const res = baseUrlValidator.value(config.baseUrl)
+          if (res) {
+            return res
           }
 
           return {
