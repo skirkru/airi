@@ -61,6 +61,10 @@ export function buildOpenAICompatibleProvider(
         errors.push(new Error('Base URL is required'))
       }
 
+      if (errors.length > 0) {
+        return { errors, reason: errors.map(e => e.message).join(', '), valid: false }
+      }
+
       if (!isUrl(config.baseUrl as string) || new URL(config.baseUrl as string).host.length === 0) {
         errors.push(new Error('Base URL is not absolute. Check your input.'))
       }

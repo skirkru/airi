@@ -210,16 +210,21 @@ export const useProvidersStore = defineStore('providers', () => {
     return null
   })
 
-  async function isTauriInWindow() {
+  async function isTamagotchi() {
     if ('window' in globalThis && globalThis.window != null) {
-      if ('__TAURI__' in globalThis.window && globalThis.window.__TAURI__ != null) {
+      if (('__TAURI_INTERNALS__' in globalThis.window && globalThis.window.__TAURI_INTERNALS__ != null) || location.host === 'tauri.localhost') {
         return true
       }
     }
     return false
   }
 
-  async function isMemoryEnough() {
+  async function isBrowserAndMemoryEnough() {
+    const isInApp = await isTamagotchi()
+
+    if (isInApp)
+      return false
+
     const webGPUAvailable = await isWebGPUSupported()
     if (webGPUAvailable) {
       return true
@@ -258,7 +263,7 @@ export const useProvidersStore = defineStore('providers', () => {
       description: 'https://github.com/huggingface/candle',
       category: 'speech',
       tasks: ['text-to-speech', 'tts'],
-      isAvailableBy: isTauriInWindow,
+      isAvailableBy: isTamagotchi,
       creator: createOpenAI,
       validation: [],
       validators: {
@@ -288,7 +293,7 @@ export const useProvidersStore = defineStore('providers', () => {
       description: 'https://github.com/huggingface/candle',
       category: 'transcription',
       tasks: ['speech-to-text', 'automatic-speech-recognition', 'asr', 'stt'],
-      isAvailableBy: isTauriInWindow,
+      isAvailableBy: isTamagotchi,
       creator: createOpenAI,
       validation: [],
       validators: {
@@ -318,7 +323,7 @@ export const useProvidersStore = defineStore('providers', () => {
       description: 'https://github.com/moeru-ai/xsai-transformers',
       category: 'speech',
       tasks: ['text-to-speech', 'tts'],
-      isAvailableBy: isMemoryEnough,
+      isAvailableBy: isBrowserAndMemoryEnough,
       creator: createOpenAI,
       validation: [],
       validators: {
@@ -348,7 +353,7 @@ export const useProvidersStore = defineStore('providers', () => {
       description: 'https://github.com/moeru-ai/xsai-transformers',
       category: 'transcription',
       tasks: ['speech-to-text', 'automatic-speech-recognition', 'asr', 'stt'],
-      isAvailableBy: isMemoryEnough,
+      isAvailableBy: isBrowserAndMemoryEnough,
       creator: createOpenAI,
       validation: [],
       validators: {
@@ -940,6 +945,7 @@ export const useProvidersStore = defineStore('providers', () => {
       descriptionKey: 'settings.pages.providers.provider.xai.description',
       icon: 'i-lobe-icons:xai',
       description: 'x.ai',
+      defaultBaseUrl: 'https://api.x.ai/v1/',
       creator: createXAI,
       validation: ['health', 'model_list'],
     }),
@@ -1312,6 +1318,7 @@ export const useProvidersStore = defineStore('providers', () => {
       descriptionKey: 'settings.pages.providers.provider.together.description',
       icon: 'i-lobe-icons:together',
       description: 'together.ai',
+      defaultBaseUrl: 'https://api.together.xyz/v1/',
       creator: createTogetherAI,
       validation: ['health', 'model_list'],
       iconColor: 'i-lobe-icons:together',
@@ -1323,6 +1330,7 @@ export const useProvidersStore = defineStore('providers', () => {
       descriptionKey: 'settings.pages.providers.provider.novita.description',
       icon: 'i-lobe-icons:novita',
       description: 'novita.ai',
+      defaultBaseUrl: 'https://api.novita.ai/openai/',
       creator: createNovita,
       validation: ['health', 'model_list'],
       iconColor: 'i-lobe-icons:novita',
@@ -1334,6 +1342,7 @@ export const useProvidersStore = defineStore('providers', () => {
       descriptionKey: 'settings.pages.providers.provider.fireworks.description',
       icon: 'i-lobe-icons:fireworks',
       description: 'fireworks.ai',
+      defaultBaseUrl: 'https://api.fireworks.ai/inference/v1/',
       creator: createFireworks,
       validation: ['health', 'model_list'],
     }),
@@ -1344,9 +1353,9 @@ export const useProvidersStore = defineStore('providers', () => {
       descriptionKey: 'settings.pages.providers.provider.featherless.description',
       icon: 'i-lobe-icons:featherless-ai',
       description: 'featherless.ai',
+      defaultBaseUrl: 'https://api.featherless.ai/v1/',
       creator: createOpenAI,
       validation: ['health', 'model_list'],
-      defaultBaseUrl: 'https://api.featherless.ai/v1/',
     }),
     'cloudflare-workers-ai': {
       id: 'cloudflare-workers-ai',
@@ -1385,8 +1394,8 @@ export const useProvidersStore = defineStore('providers', () => {
       descriptionKey: 'settings.pages.providers.provider.perplexity.description',
       icon: 'i-lobe-icons:perplexity',
       description: 'perplexity.ai',
+      defaultBaseUrl: 'https://api.perplexity.ai/',
       creator: createPerplexity,
-      defaultBaseUrl: 'https://api.perplexity.ai',
       validation: ['health', 'model_list'],
     }),
     'mistral-ai': buildOpenAICompatibleProvider({
@@ -1396,6 +1405,7 @@ export const useProvidersStore = defineStore('providers', () => {
       descriptionKey: 'settings.pages.providers.provider.mistral.description',
       icon: 'i-lobe-icons:mistral',
       description: 'mistral.ai',
+      defaultBaseUrl: 'https://api.mistral.ai/v1/',
       creator: createMistral,
       validation: ['health', 'model_list'],
       iconColor: 'i-lobe-icons:mistral',
@@ -1407,6 +1417,7 @@ export const useProvidersStore = defineStore('providers', () => {
       descriptionKey: 'settings.pages.providers.provider.moonshot.description',
       icon: 'i-lobe-icons:moonshot',
       description: 'moonshot.ai',
+      defaultBaseUrl: 'https://api.moonshot.ai/v1/',
       creator: createMoonshot,
       validation: ['health', 'model_list'],
     }),
