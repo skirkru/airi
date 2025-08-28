@@ -27,7 +27,6 @@ const { activeModel, activeProvider } = storeToRefs(useConsciousnessStore())
 const isComposing = ref(false)
 
 async function handleSend() {
-  // IME problemma 你好airi
   if (isComposing.value) {
     return
   }
