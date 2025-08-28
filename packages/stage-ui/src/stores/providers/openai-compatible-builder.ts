@@ -20,7 +20,7 @@ export function buildOpenAICompatibleProvider(
     creator: ProviderCreator
     capabilities?: ProviderMetadata['capabilities']
     validators?: ProviderMetadata['validators']
-    validation?: ('health' | 'model_list')[]
+    validation?: ('health' | 'model_list' | 'chat_completions')[]
     additionalHeaders?: Record<string, string>
   },
 ): ProviderMetadata {
@@ -79,12 +79,13 @@ export function buildOpenAICompatibleProvider(
 
       const validationChecks = validation || []
       let responseModelList = null
+      let responseChat = null
 
       if (validationChecks.includes('health')) {
         try {
-          const responseChat = await fetch(`${config.baseUrl as string}chat/completions`, { headers: { Authorization: `Bearer ${config.apiKey}`, ...additionalHeaders }, method: 'POST' })
+          responseChat = await fetch(`${config.baseUrl as string}chat/completions`, { headers: { Authorization: `Bearer ${config.apiKey}`, ...additionalHeaders }, method: 'POST' })
           responseModelList = await fetch(`${config.baseUrl as string}models`, { headers: { Authorization: `Bearer ${config.apiKey}`, ...additionalHeaders } })
-          // Little Hack because every provider with OpenAI compatible support this
+
           if (!([200, 400, 401].includes(responseChat.status) || [200, 400, 401].includes(responseModelList.status))) {
             errors.push(new Error(`Invalid Base URL, ${config.baseUrl} is not supported`))
           }
@@ -111,6 +112,22 @@ export function buildOpenAICompatibleProvider(
         }
         catch (e) {
           errors.push(new Error(`Model list check failed: ${(e as Error).message}`))
+        }
+      }
+
+      if (validationChecks.includes('chat_completions')) {
+        try {
+          let response = responseChat
+          if (!response) {
+            response = await fetch(`${config.baseUrl as string}chat/completions`, { headers: { Authorization: `Bearer ${config.apiKey}`, ...additionalHeaders }, method: 'POST' })
+          }
+
+          if (!response.ok) {
+            errors.push(new Error(`Invalid API Key`))
+          }
+        }
+        catch (e) {
+          errors.push(new Error(`Chat Completions check Failed: ${(e as Error).message}`))
         }
       }
 

@@ -252,7 +252,7 @@ export const useProvidersStore = defineStore('providers', () => {
       description: 'openrouter.ai',
       defaultBaseUrl: 'https://openrouter.ai/api/v1/',
       creator: createOpenRouter,
-      validation: ['health', 'model_list'],
+      validation: ['health', 'model_list', 'chat_completions'],
     }),
     'app-local-audio-speech': buildOpenAICompatibleProvider({
       id: 'app-local-audio-speech',
@@ -1430,7 +1430,7 @@ export const useProvidersStore = defineStore('providers', () => {
       description: 'modelscope',
       defaultBaseUrl: 'https://api-inference.modelscope.cn/v1/',
       creator: createOpenAI,
-      validation: ['health', 'model_list'],
+      validation: ['health', 'model_list', 'chat_completions'],
       iconColor: 'i-lobe-icons:modelscope',
     }),
     'player2': {
