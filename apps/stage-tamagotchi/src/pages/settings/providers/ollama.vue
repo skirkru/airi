@@ -11,8 +11,9 @@ import {
 } from '@proj-airi/stage-ui/components'
 import { useProviderValidation } from '@proj-airi/stage-ui/composables/useProviderValidation'
 import { useProvidersStore } from '@proj-airi/stage-ui/stores/providers'
+import { FieldKeyValues } from '@proj-airi/ui'
 import { storeToRefs } from 'pinia'
-import { computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 
 const providerId = 'ollama'
 const providersStore = useProvidersStore()
@@ -38,6 +39,83 @@ const {
   validationMessage,
   handleResetSettings,
 } = useProviderValidation(providerId)
+
+const headers = ref<{ key: string, value: string }[]>(Object.entries(providers.value[providerId]?.headers).map(([key, value]) => ({ key, value } as { key: string, value: string })) || [{ key: '', value: '' }])
+
+function addKeyValue(headers: { key: string, value: string }[], key: string, value: string) {
+  if (!headers)
+    return
+
+  headers.push({ key, value })
+}
+
+function removeKeyValue(index: number, headers: { key: string, value: string }[]) {
+  if (!headers)
+    return
+
+  if (headers.length === 1) {
+    headers[0].key = ''
+    headers[0].value = ''
+  }
+  else {
+    headers.splice(index, 1)
+  }
+}
+
+watch(headers, (headers) => {
+  if (headers.length > 0 && (headers[headers.length - 1].key !== '' || headers[headers.length - 1].value !== '')) {
+    headers.push({ key: '', value: '' })
+  }
+
+  providers.value[providerId].headers = headers.filter(header => header.key !== '').reduce((acc, header) => {
+    acc[header.key] = header.value
+    return acc
+  }, {} as Record<string, string>)
+}, {
+  deep: true,
+  immediate: true,
+})
+
+async function refetch() {
+  try {
+    const validationResult = await providerMetadata.value.validators.validateProviderConfig({
+      baseUrl: baseUrl.value,
+      headers: headers.value.filter(header => header.key !== '').reduce((acc, header) => {
+        acc[header.key] = header.value
+        return acc
+      }, {} as Record<string, string>),
+    })
+
+    if (!validationResult.valid) {
+      validationMessage.value = t('settings.dialogs.onboarding.validationError', {
+        error: validationResult.reason,
+      })
+    }
+  }
+  catch (error) {
+    validationMessage.value = t('settings.dialogs.onboarding.validationError', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
+
+watch([baseUrl, headers], refetch, { immediate: true })
+watch(headers, refetch, { deep: true })
+
+onMounted(() => {
+  providersStore.initializeProvider(providerId)
+
+  // Initialize refs with current values
+  baseUrl.value = providers.value[providerId]?.baseUrl || providerMetadata.value?.defaultOptions?.().baseUrl || ''
+
+  // Initialize headers if not already set
+  if (!providers.value[providerId]?.headers) {
+    providers.value[providerId].headers = {}
+  }
+  if (headers.value.length === 0) {
+    headers.value = [{ key: '', value: '' }]
+  }
+})
 </script>
 
 <template>
