@@ -1421,6 +1421,18 @@ export const useProvidersStore = defineStore('providers', () => {
       creator: createMoonshot,
       validation: ['health', 'model_list'],
     }),
+    'modelscope': buildOpenAICompatibleProvider({
+      id: 'modelscope',
+      name: 'ModelScope',
+      nameKey: 'settings.pages.providers.provider.modelscope.title',
+      descriptionKey: 'settings.pages.providers.provider.modelscope.description',
+      icon: 'i-lobe-icons:modelscope',
+      description: 'modelscope',
+      defaultBaseUrl: 'https://api-inference.modelscope.cn/v1/',
+      creator: createOpenAI,
+      validation: ['health', 'model_list'],
+      iconColor: 'i-lobe-icons:modelscope',
+    }),
     'player2': {
       id: 'player2',
       category: 'chat',
