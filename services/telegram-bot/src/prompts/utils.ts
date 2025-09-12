@@ -1,4 +1,4 @@
-import type { TextPart } from '@xsai/shared-chat'
+import type { TextContentPart } from '@xsai/shared-chat'
 
 export function vif(condition: boolean, a: string, b = '') {
   return condition ? a : b
@@ -25,10 +25,13 @@ export function span(...args: string[]) {
     .join(' ')
 }
 
-export function div(...args: (string | TextPart | TextPart[])[]) {
+export function div(...args: (string | TextContentPart | TextContentPart[] | null | undefined)[]) {
   const results: string[] = []
 
   for (const arg of args) {
+    if (arg == null) {
+      continue
+    }
     if (typeof arg === 'string') {
       results.push(arg)
     }

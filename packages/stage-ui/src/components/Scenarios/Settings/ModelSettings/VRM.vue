@@ -28,8 +28,6 @@ const {
   cameraDistance,
   trackingMode,
 
-  directionalLightPosition,
-  directionalLightTarget,
   directionalLightRotation,
   directionalLightIntensity,
   directionalLightColor,
@@ -43,7 +41,6 @@ const {
 
   envSelect,
   skyBoxIntensity,
-  specularMix,
 } = storeToRefs(vrm)
 const trackingOptions = computed(() => [
   { value: 'camera', label: t('settings.vrm.scale-and-position.eye-tracking-mode.options.option.camera'), class: 'col-start-3' },
@@ -128,32 +125,15 @@ const tabList = [
         />
       </template>
 
-      <PropertyPoint
-        v-model:x="directionalLightPosition.x"
-        v-model:y="directionalLightPosition.y"
-        v-model:z="directionalLightPosition.z"
-        label="Directional Light Position"
-        :x-config="{ step: 0.001, label: 'X', formatValue: val => val?.toFixed(4) }"
-        :y-config="{ step: 0.001, label: 'Y', formatValue: val => val?.toFixed(4) }"
-        :z-config="{ step: 0.001, label: 'Z', formatValue: val => val?.toFixed(4) }"
+      <PropertyNumber
+        v-model="directionalLightRotation.x"
+        :config="{ min: -180, max: 180, step: 1, label: 'RotationXDeg', formatValue: val => val?.toFixed(0) }"
+        label="Directional Light Rotation - X"
       />
-      <PropertyPoint
-        v-model:x="directionalLightTarget.x"
-        v-model:y="directionalLightTarget.y"
-        v-model:z="directionalLightTarget.z"
-        label="Directional Light Target"
-        :x-config="{ step: 0.001, label: 'X', formatValue: val => val?.toFixed(4) }"
-        :y-config="{ step: 0.001, label: 'Y', formatValue: val => val?.toFixed(4) }"
-        :z-config="{ step: 0.001, label: 'Z', formatValue: val => val?.toFixed(4) }"
-      />
-      <PropertyPoint
-        v-model:x="directionalLightRotation.x"
-        v-model:y="directionalLightRotation.y"
-        v-model:z="directionalLightRotation.z"
-        label="Directional Light Rotation"
-        :x-config="{ step: 0.001, label: 'X', formatValue: val => val?.toFixed(4) }"
-        :y-config="{ step: 0.001, label: 'Y', formatValue: val => val?.toFixed(4) }"
-        :z-config="{ step: 0.001, label: 'Z', formatValue: val => val?.toFixed(4) }"
+      <PropertyNumber
+        v-model="directionalLightRotation.y"
+        :config="{ min: -180, max: 180, step: 1, label: 'RotationYDeg', formatValue: val => val?.toFixed(0) }"
+        label="Directional Light Rotation - Y"
       />
       <PropertyColor
         v-model="directionalLightColor"
@@ -204,11 +184,6 @@ const tabList = [
                 v-model="skyBoxIntensity"
                 :config="{ min: 0, max: 1, step: 0.01, label: 'Intensity' }"
                 :label="t('settings.vrm.skybox.skybox-intensity')"
-              />
-              <PropertyNumber
-                v-model="specularMix"
-                :config="{ min: 0, max: 1, step: 0.01, label: 'Mix' }"
-                :label="t('settings.vrm.skybox.skybox-specular-mix')"
               />
             </div>
           </div>

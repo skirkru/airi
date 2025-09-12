@@ -17,6 +17,7 @@ words:
   - astrojs
   - Attributify
   - attw
+  - audia
   - audioworklet
   - autoplay
   - awilix
@@ -70,6 +71,7 @@ words:
   - devlogs
   - directml
   - dokidoki
+  - dompurify
   - dotenvx
   - DownloadLive2DSDK
   - dreamlog
@@ -84,6 +86,7 @@ words:
   - elevenlabs
   - Equirectangular
   - esaxx
+  - eventa
   - Factorio
   - feaxios
   - formkit
@@ -138,6 +141,7 @@ words:
   - Maru
   - matchall
   - mdit
+  - mediabunny
   - micvad
   - mineflayer
   - mingcute
@@ -238,6 +242,7 @@ words:
   - tresjs
   - tsdown
   - turborepo
+  - unbird
   - unbundle
   - uncrypto
   - unhead
@@ -258,6 +263,7 @@ words:
   - waapi
   - wavefile
   - webgpu
+  - webworkers
   - weeb
   - wgpu
   - wlipsync

@@ -40,7 +40,7 @@ export const useVRM = defineStore('vrm', () => {
   const cameraPosition = useLocalStorage('settings/vrm/camera-position', { x: 0, y: 0, z: -1 })
   const cameraDistance = useLocalStorage('settings/vrm/cameraDistance', 0)
 
-  const directionalLightPosition = useLocalStorage('settings/vrm/scenes/scene/directional-light/position', { x: 0, y: 0, z: -10 })
+  const directionalLightPosition = useLocalStorage('settings/vrm/scenes/scene/directional-light/position', { x: 0, y: 0, z: -1 })
   const directionalLightTarget = useLocalStorage('settings/vrm/scenes/scene/directional-light/target', { x: 0, y: 0, z: 0 })
   const directionalLightRotation = useLocalStorage('settings/vrm/scenes/scene/directional-light/rotation', { x: 0, y: 0, z: 0 })
   // TODO: Manual directional light intensity will not work for other
@@ -82,7 +82,6 @@ export const useVRM = defineStore('vrm', () => {
   // environment related setting
   const envSelect = useLocalStorage('settings/vrm/envEnabled', 'skyBox' as 'hemisphere' | 'skyBox')
   const skyBoxSrc = useLocalStorage('settings/vrm/skyBoxUrl', defaultSkyBoxSrc)
-  const specularMix = useLocalStorage('settings/vrm/specularMix', 0)
   const skyBoxIntensity = useLocalStorage('settings/vrm/skyBoxIntensity', 0.1)
 
   return {
@@ -116,7 +115,6 @@ export const useVRM = defineStore('vrm', () => {
     eyeHeight,
     envSelect,
     skyBoxSrc,
-    specularMix,
     skyBoxIntensity,
 
     shouldUpdateView,

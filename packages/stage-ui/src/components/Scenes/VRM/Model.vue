@@ -1,7 +1,7 @@
 <script setup lang="ts">
-/* eslint-disable style/max-statements-per-line */
 import type { VRMCore } from '@pixiv/three-vrm-core'
-import type { AnimationClip, Group, Texture } from 'three'
+import type { AnimationClip, Group, SphericalHarmonics3, Texture } from 'three'
+import type * as THREE from 'three'
 
 import { VRMUtils } from '@pixiv/three-vrm'
 import { useLoop, useTresContext } from '@tresjs/core'
@@ -11,13 +11,9 @@ import {
   AnimationMixer,
   MathUtils,
   Mesh,
-  MeshBasicMaterial,
   MeshPhysicalMaterial,
   MeshStandardMaterial,
-  MeshToonMaterial,
   Quaternion,
-  RawShaderMaterial,
-  ShaderMaterial,
   SRGBColorSpace,
   Vector3,
   VectorKeyframeTrack,
@@ -27,6 +23,12 @@ import { computed, onMounted, onUnmounted, ref, toRef, watch } from 'vue'
 import { clipFromVRMAnimation, loadVRMAnimation, useBlink, useIdleEyeSaccades } from '../../../composables/vrm/animation'
 import { loadVrm } from '../../../composables/vrm/core'
 import { useVRMEmote } from '../../../composables/vrm/expression'
+import {
+  createIblProbeController,
+  injectDiffuseIBL,
+  normalizeEnvMode,
+  updateNprShaderSetting,
+} from '../../../composables/vrm/shader/ibl'
 import { useVRM } from '../../../stores/vrm'
 
 const props = defineProps<{
@@ -34,7 +36,8 @@ const props = defineProps<{
   idleAnimation: string
   loadAnimations?: string[]
   paused: boolean
-  nprEquirectTex?: Texture | null
+  nprEquirectTex: Texture | null
+  nprIrrSH: SphericalHarmonics3 | null
 }>()
 
 const emit = defineEmits<{
@@ -68,13 +71,15 @@ const {
   trackingMode,
 
   envSelect,
-  specularMix,
   skyBoxIntensity,
 } = storeToRefs(vrmStore)
 const vrmGroup = ref<Group>()
 const idleEyeSaccades = useIdleEyeSaccades()
 
 const nprProgramVersion = ref(0)
+
+// For MToon IBL
+let airiIblProbe: ReturnType<typeof createIblProbeController> | null = null
 
 async function loadModel() {
   await until(modelLoading).not.toBeTruthy()
@@ -209,135 +214,61 @@ async function loadModel() {
 
       vrmEmote.value = useVRMEmote(_vrm)
 
-      // TODO: perhaps we should allow user to choose whether to enable
-      //       this kind of behavior or not?
-      // - Lilia: NO need, cause NPR mat should always follow NPR route, and BPR mat shoule always follow PBR route.
-      // WORKAROUND: set to use envMapIntensity for all matched materials
-      // - Lilia: YES, envMapIntensity will be exposed to GUI user to adjust.
-      // REVIEW: MeshToonMaterial, and MeshBasicMaterial will not be affected
-      //         since they do not have envMapIntensity property
-      // - Lilia: NPR mat can be affected by envMapIntensity if we choose to user skybox as envMap
-      //        This part will be implemented as a NPR HDRI shader injection
+      // material selection
+      function isMToon(mat: any): boolean {
+        return !!(mat?.isShaderMaterial && mat.userData?.vrmMaterialType === 'MToon'
+        )
+      }
+      const isShaderMat = (m: any): m is THREE.ShaderMaterial => !!m?.isShaderMaterial
+
+      // refactoring
+      // MToon material skybox lightProbe setting
+      if (!airiIblProbe && scene.value)
+        airiIblProbe = createIblProbeController(scene.value)
+
+      // Material traverse setting
       _vrm.scene.traverse((child) => {
         if (child instanceof Mesh && child.material) {
           const material = Array.isArray(child.material) ? child.material : [child.material]
           material.forEach((mat) => {
+            // console.debug("shader material: ", mat)
             if (mat instanceof MeshStandardMaterial || mat instanceof MeshPhysicalMaterial) {
               // Should read envMap intensity from outside props
               mat.envMapIntensity = 1.0
               mat.needsUpdate = true
             }
-            else if (
-              mat instanceof MeshToonMaterial
-              || mat instanceof MeshBasicMaterial
-              || mat instanceof ShaderMaterial
-              || mat instanceof RawShaderMaterial
-            ) {
+            else if (isMToon(mat)) {
+              // --- MToon material, add IBL lightProbe only ---
               // close tone mapping for NPR materials
               if ('toneMapped' in mat)
                 mat.toneMapped = false
+            }
+            else if (isShaderMat(mat)) {
+              // --- Shader material, further IBL injection needed ---
               // disable envMap for NPR materials, envMap will be reassigned by default skybox
+              // close tone mapping for NPR materials
+              // console.debug("Mat: ", mat)
+              // TODO: stylised shader injection
+              // Lilia: I plan to replce all injected shader code to be my own, so that it can always avoid double injection and unkown user upload VRM injected shader behaviour...
+              if ('toneMapped' in mat)
+                mat.toneMapped = false
               if ('envMap' in mat && mat.envMap)
                 mat.envMap = null
               // NPR materials usually use sRGB textures
-              if ('map' in mat && mat.map && 'colorSpace' in mat.map) {
-                // try...catch to avoid some weird error (diff verion of three.js?)
-                try { mat.map.colorSpace = SRGBColorSpace }
-                catch {}
+              const tex = (mat as any).map as THREE.Texture | undefined
+              if (tex && (tex as any).colorSpace !== undefined) {
+                try {
+                  (tex as any).colorSpace = SRGBColorSpace
+                }
+                catch (e) {
+                  console.warn('Failed to set colorSpace on texture:', e)
+                }
               }
 
-              // Foce recompile shader to inject npr env shader at the begining
-              const baseKey = mat.customProgramCacheKey?.() ?? ''
-              mat.customProgramCacheKey = () => `${baseKey}|npr:${nprProgramVersion.value}`
-
-              // NPR shader injection
-              const prevOnBeforeCompile = mat.onBeforeCompile
-              mat.onBeforeCompile = (shader: any, renderer: any) => {
-                // Keep the previous onBeforeCompile behaviour if any
-                prevOnBeforeCompile?.(shader, renderer)
-                // Obtain skybox texture from scene environment
-                const equirectTex = props.nprEquirectTex ?? null
-
-                // If no normal, then skip the rest
-                const hasNormal = shader.fragmentShader.includes('vNormal')
-                if (!hasNormal)
-                  return
-
-                // Setup uniforms
-                shader.uniforms.uNprEnvMode = { value: (envSelect.value === 'hemisphere') ? 0 : 2 } // 0=hemi: no further injection; 2=skybox
-                shader.uniforms.uEnvIntensity = { value: skyBoxIntensity.value } // exposed to GUI
-                shader.uniforms.uEnvMapEquirect = { value: equirectTex }
-                shader.uniforms.uSpecularMix = { value: specularMix.value }
-
-                // If it has viewDir, then we can do reflection
-                const hasView = shader.fragmentShader.includes('vViewPosition')
-
-                // Shader injection!
-                shader.fragmentShader = shader.fragmentShader.replace(
-                  '#include <common>',
-                  `
-                      #include <common>
-                      uniform int   uNprEnvMode;         // 0=off, 2=Skybox
-                      uniform float uEnvIntensity;
-                      uniform float uSpecularMix;       // 0=diffuse only, 1=specular only
-
-                      uniform sampler2D uEnvMapEquirect; // Skybox(equirect)
-                      // --- Direction to equirectangular UV ---
-                      vec2 dirToEquirectUV(vec3 d){
-                        d = normalize(d);
-                        float phi = atan(d.z, d.x);
-                        float th  = asin(clamp(d.y, -1.0, 1.0));
-                        return vec2(0.5 + phi/(2.0*PI), 0.5 - th/PI);
-                      }
-                      `,
-                ).replace(
-                  '#include <dithering_fragment>',
-                  `
-                      // --- NPR skybox env lighting injection ---
-                      vec3 n = normalize(vNormal);
-
-                      // Skybox lighting: equirect sampling -  difuse & reflection
-                      vec3 envCol = vec3(0.0);
-                      if(uNprEnvMode == 2) {
-                        ${hasView
-                          ? `vec3 v = normalize(vViewPosition);
-                            vec3 r = reflect(v, n);`
-                          : `vec3 r = n;`}
-
-                        vec3 nW = inverseTransformDirection(n, viewMatrix);
-                        vec3 rW = inverseTransformDirection(r, viewMatrix);
-                        vec3 vW = normalize(reflect(-rW, nW));
-
-                        // To resolve the upside-down reflection issue of equirect map
-                        nW.z = -nW.z;
-                        rW.z = -rW.z;
-                        
-                        float NoV = clamp(dot(nW, vW), 0.0, 1.0);
-
-                        // Specular term
-                        vec3 envSpec = texture2D(uEnvMapEquirect, dirToEquirectUV(rW)).rgb;
-                        // TODO: NPR style specular? how to do that?
-
-                        // Diffuse term
-                        vec3 envDiff    = texture2D(uEnvMapEquirect, dirToEquirectUV(-nW)).rgb;
-                        // TODO: NPR style diffuse? how to do that?
-
-                        // Mix specular and diffuse
-                        envCol = uSpecularMix * envSpec + (1.0 - uSpecularMix) * envDiff;
-
-                        // skybox color mixing 
-                        gl_FragColor.rgb += envCol * uEnvIntensity;
-                      }
-                      // --- Injection ends ---
-
-                      #include <dithering_fragment>
-                      `,
-                )
-                mat.userData.__nprUniforms = shader.uniforms
-              }
-              mat.needsUpdate = true
+              // refactoring, IBL injection
+              // TODO: it should be an unified shader injection entrance
+              injectDiffuseIBL(mat)
             }
-            // console.debug('material: ', mat)
           })
         }
       })
@@ -417,38 +348,30 @@ function componentCleanUp() {
   if (vrm.value) {
     vrm.value.scene.removeFromParent()
     VRMUtils.deepDispose(vrm.value.scene)
+    airiIblProbe?.dispose()
   }
 }
 
-// Switch to NPR SkyBox
-function updateNprUniforms(tex: Texture | null) {
-  const root = vrm.value?.scene
-  if (!root)
-    return
-
-  const mode = (envSelect.value === 'skyBox' && !!tex) ? 2 : 0 // 0=off，2=skybox
-  root.traverse((child) => {
-    if (child instanceof Mesh && child.material) {
-      const mats = Array.isArray(child.material) ? child.material : [child.material]
-      mats.forEach((mat) => {
-        const u = mat.userData?.__nprUniforms
-        if (!u)
-          return
-        // Skybox texture and mode
-        u.uEnvMapEquirect.value = tex
-        u.uNprEnvMode.value = mode
-        u.uEnvIntensity.value = skyBoxIntensity.value
-        u.uSpecularMix.value = specularMix.value
-      })
-    }
-  })
-}
 // watch NPR skybox
 watch(
-  () => [envSelect.value, props.nprEquirectTex, skyBoxIntensity.value, specularMix.value],
+  () => [
+    envSelect.value,
+    props.nprEquirectTex,
+    skyBoxIntensity.value,
+    props.nprIrrSH,
+  ],
   async () => {
+    if (!vrm.value)
+      return
     nprProgramVersion.value += 1
-    updateNprUniforms(props.nprEquirectTex ?? null)
+    // updateNprUniforms(props.nprEquirectTex ?? null, props.nprIrrSH ?? null)
+    const mode = normalizeEnvMode(envSelect.value)
+    updateNprShaderSetting(vrm.value?.scene, {
+      mode,
+      intensity: skyBoxIntensity.value,
+      sh: props.nprIrrSH ?? null,
+    })
+    airiIblProbe?.update(mode, skyBoxIntensity.value, props.nprIrrSH ?? null)
   },
   { immediate: true, deep: false },
 )

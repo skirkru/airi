@@ -1,129 +1,81 @@
 import type { MaybeRefOrGetter } from 'vue'
 
-import { toWav } from '@proj-airi/audio/encoding'
 import { until } from '@vueuse/core'
-import { ref, shallowRef, toRef, watch } from 'vue'
+import { BufferTarget, MediaStreamAudioTrackSource, Output, QUALITY_MEDIUM, WavOutputFormat } from 'mediabunny'
+import { ref, shallowRef, toRef } from 'vue'
+
+function getMediaStreamTrack(stream: MediaStream) {
+  const tracks = stream.getAudioTracks()
+  if (!tracks.length)
+    throw new Error('No audio tracks found in stream')
+  return tracks[0]
+}
 
 export function useAudioRecorder(
   media: MaybeRefOrGetter<MediaStream | undefined>,
 ) {
   const mediaRef = toRef(media)
   const recording = shallowRef<Blob>()
-  const isRecording = ref(false)
 
-  // Audio processing variables
-  const audioContext = ref<AudioContext>()
-  const sourceNode = ref<MediaStreamAudioSourceNode>()
-  const processorNode = ref<ScriptProcessorNode>() // Using ScriptProcessorNode for wider compatibility
-  const audioData = ref<Float32Array<ArrayBufferLike>[]>([])
+  const mediaOutput = ref<Output>()
+  const mediaFormat = ref<string>()
 
   const onStopRecordHooks = ref<Array<(recording: Blob | undefined) => Promise<void>>>([])
 
   function onStopRecord(callback: (recording: Blob | undefined) => Promise<void>) {
     onStopRecordHooks.value.push(callback)
-  }
-
-  // Convert audio buffer to WAV format
-  function encodeWAV(samples: Float32Array[], sampleRate: number): Blob {
-    const view = toWav(samples[0].buffer, sampleRate)
-    return new Blob([view], { type: 'audio/wav' })
+    // Return unsubscribe function to prevent memory leaks
+    return () => {
+      onStopRecordHooks.value = onStopRecordHooks.value.filter(h => h !== callback)
+    }
   }
 
   async function startRecord() {
     await until(mediaRef).toBeTruthy()
-    if (!mediaRef.value) {
-      return
-    }
 
-    // Reset recording state
-    recording.value = undefined
-    audioData.value = []
-    isRecording.value = true
+    const track = await getMediaStreamTrack(mediaRef.value!)
+    mediaOutput.value = new Output({ format: new WavOutputFormat(), target: new BufferTarget() })
 
-    try {
-      // Create audio context and nodes
-      audioContext.value = new AudioContext()
-      sourceNode.value = audioContext.value.createMediaStreamSource(mediaRef.value)
+    const audioSource = new MediaStreamAudioTrackSource(track, { codec: 'pcm-f32', bitrate: QUALITY_MEDIUM })
+    audioSource.errorPromise.catch(console.error)
+    mediaOutput.value.addAudioTrack(audioSource)
 
-      // Create script processor for audio processing
-      processorNode.value = audioContext.value.createScriptProcessor(4096, 1, 1)
-
-      // Process audio data
-      processorNode.value.onaudioprocess = (e) => {
-        if (isRecording.value) {
-          const channelData = new Float32Array(e.inputBuffer.getChannelData(0))
-          audioData.value.push(channelData)
-        }
-      }
-
-      // Connect nodes
-      sourceNode.value.connect(processorNode.value)
-      processorNode.value.connect(audioContext.value.destination)
-    }
-    catch (error) {
-      console.error('Error starting audio recording:', error)
-      isRecording.value = false
-    }
+    mediaFormat.value = await mediaOutput.value.getMimeType()
+    await mediaOutput.value.start()
   }
 
   async function stopRecord() {
-    if (!isRecording.value || !audioContext.value) {
+    if (!mediaOutput.value) {
       return
     }
 
-    isRecording.value = false
+    await mediaOutput.value.finalize()
+    const bufferTarget = mediaOutput.value.target as BufferTarget | undefined
+    const buffer = bufferTarget?.buffer
+    const audioBlob = buffer ? new Blob([buffer], { type: mediaFormat.value }) : undefined
 
-    try {
-      // Disconnect and clean up audio nodes
-      if (processorNode.value) {
-        processorNode.value.disconnect()
-        processorNode.value = undefined
+    recording.value = audioBlob
+
+    // await hooks and catch errors
+    for (const hook of onStopRecordHooks.value) {
+      try {
+        await hook(audioBlob)
       }
-
-      if (sourceNode.value) {
-        sourceNode.value.disconnect()
-        sourceNode.value = undefined
+      catch (err) {
+        console.error('onStopRecord hook failed:', err)
       }
-
-      // Create WAV from recorded data
-      if (audioData.value.length > 0) {
-        recording.value = encodeWAV(audioData.value, audioContext.value.sampleRate)
-
-        // Call hooks with the recording
-        for (const hook of onStopRecordHooks.value) {
-          await hook(recording.value)
-        }
-      }
-      else {
-        recording.value = undefined
-      }
-
-      // Close audio context
-      await audioContext.value.close()
-      audioContext.value = undefined
-    }
-    catch (error) {
-      console.error('Error stopping audio recording:', error)
     }
 
-    return audioData.value
+    mediaOutput.value = undefined
+
+    return audioBlob
   }
-
-  watch(mediaRef, () => {
-    if (isRecording.value) {
-      stopRecord().then(() => {
-        if (mediaRef.value && mediaRef.value.active) {
-          startRecord()
-        }
-      })
-    }
-  })
 
   return {
     startRecord,
     stopRecord,
     onStopRecord,
+
     recording,
-    isRecording,
   }
 }

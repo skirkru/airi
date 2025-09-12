@@ -17,7 +17,6 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import Live2DScene from './Live2D.vue'
 import VRMScene from './VRM.vue'
 
-import { useQueue } from '../../composables/queue'
 import { useDelayMessageQueue, useEmotionsMessageQueue, useMessageContentQueue } from '../../composables/queues'
 import { llmInferenceEndToken } from '../../constants'
 import { EMOTION_EmotionMotionName_value, EMOTION_VRMExpressionName_value, EmotionThinkMotionName } from '../../constants/emotions'
@@ -28,6 +27,7 @@ import { useSpeechStore } from '../../stores/modules/speech'
 import { useProvidersStore } from '../../stores/providers'
 import { useSettings } from '../../stores/settings'
 import { useVRM } from '../../stores/vrm'
+import { createQueue } from '../../utils/queue'
 
 withDefaults(defineProps<{
   paused?: boolean
@@ -36,6 +36,8 @@ withDefaults(defineProps<{
   yOffset?: number | string
   scale?: number
 }>(), { paused: false, scale: 1 })
+
+const componentState = defineModel<'pending' | 'loading' | 'mounted'>('state', { default: 'pending' })
 
 const db = ref<DuckDBWasmDrizzleDatabase>()
 // const transformersProvider = createTransformers({ embedWorkerURL })
@@ -74,11 +76,21 @@ vrmStore.onShouldUpdateView(async () => {
 const audioAnalyser = ref<AnalyserNode>()
 const nowSpeaking = ref(false)
 const lipSyncStarted = ref(false)
+let currentAudioSource: AudioBufferSourceNode | null = null
 
-const audioQueue = useQueue<{ audioBuffer: AudioBuffer, text: string }>({
+const audioQueue = createQueue<{ audioBuffer: AudioBuffer, text: string }>({
   handlers: [
     (ctx) => {
       return new Promise((resolve) => {
+        // Stop any currently playing audio
+        if (currentAudioSource) {
+          try {
+            currentAudioSource.stop()
+            currentAudioSource.disconnect()
+          }
+          catch {}
+          currentAudioSource = null
+        }
         // Create an AudioBufferSourceNode
         const source = audioContext.createBufferSource()
         source.buffer = ctx.data.audioBuffer
@@ -90,9 +102,13 @@ const audioQueue = useQueue<{ audioBuffer: AudioBuffer, text: string }>({
 
         // Start playing the audio
         nowSpeaking.value = true
+        currentAudioSource = source
         source.start(0)
         source.onended = () => {
           nowSpeaking.value = false
+          if (currentAudioSource === source) {
+            currentAudioSource = null
+          }
           resolve()
         }
       })
@@ -136,29 +152,24 @@ async function handleSpeechGeneration(ctx: { data: string }) {
 
     // Decode the ArrayBuffer into an AudioBuffer
     const audioBuffer = await audioContext.decodeAudioData(res)
-    await audioQueue.add({ audioBuffer, text: ctx.data })
+    audioQueue.enqueue({ audioBuffer, text: ctx.data })
   }
   catch (error) {
     console.error('Speech generation failed:', error)
   }
 }
 
-const ttsQueue = useQueue<string>({
+const ttsQueue = createQueue<string>({
   handlers: [
     handleSpeechGeneration,
   ],
-})
-
-ttsQueue.on('add', (content) => {
-  // eslint-disable-next-line no-console
-  console.debug('ttsQueue added', content)
 })
 
 const messageContentQueue = useMessageContentQueue(ttsQueue)
 
 const { currentMotion } = storeToRefs(useLive2d())
 
-const emotionsQueue = useQueue<Emotion>({
+const emotionsQueue = createQueue<Emotion>({
   handlers: [
     async (ctx) => {
       if (stageModelRenderer.value === 'vrm') {
@@ -209,6 +220,16 @@ function setupAnalyser() {
 }
 
 onBeforeMessageComposed(async () => {
+  // Stop any currently playing audio and clear the audio queue
+  if (currentAudioSource) {
+    try {
+      currentAudioSource.stop()
+      currentAudioSource.disconnect()
+    }
+    catch {}
+    currentAudioSource = null
+  }
+  audioQueue.clear()
   setupAnalyser()
   setupLipSync()
 })
@@ -218,16 +239,16 @@ onBeforeSend(async () => {
 })
 
 onTokenLiteral(async (literal) => {
-  await messageContentQueue.add(literal)
+  messageContentQueue.enqueue(literal)
 })
 
 onTokenSpecial(async (special) => {
-  await delaysQueue.add(special)
-  await emotionMessageContentQueue.add(special)
+  delaysQueue.enqueue(special)
+  emotionMessageContentQueue.enqueue(special)
 })
 
 onStreamEnd(async () => {
-  await delaysQueue.add(llmInferenceEndToken)
+  delaysQueue.enqueue(llmInferenceEndToken)
 })
 
 onAssistantResponseEnd(async (_message) => {
@@ -267,7 +288,8 @@ defineExpose({
       <Live2DScene
         v-if="stageModelRenderer === 'live2d' && showStage"
         ref="live2dSceneRef"
-        min-w="50% <lg:full" min-h="100 sm:100" h-full w-full flex-1
+        v-model:state="componentState" min-w="50% <lg:full" min-h="100 sm:100" h-full w-full
+        flex-1
         :model-src="stageModelSelectedUrl"
         :focus-at="focusAt"
         :mouth-open-size="mouthOpenSize"

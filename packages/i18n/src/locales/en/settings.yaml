@@ -17,6 +17,7 @@ dialogs:
     baseUrl: Base URL
     baseUrlHelp: API endpoint URL (use default if unsure)
     accountId: Account ID
+    validationSuccess: Configuration validation success
     validationFailed: Configuration validation failed
     validationError: 'Validation error: {error}'
     skipForNow: Skip for now
@@ -25,7 +26,9 @@ dialogs:
     start: Let's do it!
     select-model: Choose model
     no-models: No available models
-    no-models-help: Please return to the previous step and check your API key, or check the network connection.
+    no-models-help: >-
+      Please return to the previous step and check your API key, or check the
+      network connection.
 language:
   title: Language
   description: >
@@ -198,6 +201,10 @@ pages:
     hearing:
       description: Configure how speech recognition works
       title: Hearing
+      sections:
+        section:
+          provider-selection:
+            description: Select the suitable speech recognition provider
     memory-long-term:
       description: Long-term memory specific settings and management
       title: Long-Term Memory
@@ -334,6 +341,9 @@ pages:
               placeholder: Input Cloudflare API Key
         title: Cloudflare Workers AI
       common:
+        status:
+          validating: Validating
+          valid: Configuration seems to be valid.
         fields:
           field:
             pitch:
@@ -401,6 +411,9 @@ pages:
       index-tts-vllm:
         description: https://index-tts.github.io/
         title: Bilibili / IndexTTS
+      azure-ai-foundry:
+        description: Azure AI Foundry
+        title: Azure AI Foundry
       mistral:
         description: mistral.ai
         title: Mistral
@@ -464,7 +477,7 @@ pages:
   scene:
     description: Configure the environment where the character lives
     title: Scene
-  themes:
+  system:
     color-scheme:
       description: Change the color scheme of the stage.
       title: Color Scheme
@@ -487,6 +500,11 @@ pages:
           title: Color Scheme
         developer:
           title: Developer
+          sections:
+            section:
+              use-magic-keys:
+                title: useMagicKeys
+                description: Test shortcuts
         theme-presets:
           presets:
             - colors:
@@ -551,7 +569,7 @@ pages:
                 porcelain and paintings
               title: Chinese Traditional Colors
           title: Color Scheme Presets
-    title: Appearance
+    title: System
 sections:
   section:
     general:

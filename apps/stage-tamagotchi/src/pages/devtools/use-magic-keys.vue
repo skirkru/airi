@@ -132,3 +132,8 @@ const Key = defineComponent({
     >
   </div>
 </template>
+
+<route lang="yaml">
+meta:
+  layout: settings
+</route>

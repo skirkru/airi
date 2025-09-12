@@ -1,5 +1,5 @@
 [package]
-name = "app"
+name = "airi"
 version.workspace = true
 description = "AIRI tamagotchi app built with Tauri"
 authors = [ "LemonNekoGH <self@lemonneko.moe>" ]
@@ -21,7 +21,7 @@ crate-type = [
 ]
 
 [build-dependencies]
-tauri-build = { version = "2.2.0", features = [] }
+tauri-build = { version = "2.4.0", features = [] }
 
 [dependencies]
 log = "0.4"
